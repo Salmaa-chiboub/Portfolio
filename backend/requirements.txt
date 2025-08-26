@@ -1,0 +1,51 @@
+Django==5.2.4
+djangorestframework==3.16.0
+djangorestframework-simplejwt==5.3.0
+asgiref==3.9.1
+sqlparse==0.5.3
+
+# Database
+dj-database-url==3.0.1
+psycopg2-binary==2.9.10
+
+# Security & Authentication
+PyJWT==2.8.0
+django-axes==6.1.1
+python-decouple==3.8
+
+# CORS & Headers
+django-cors-headers==4.3.1
+
+
+
+# Filtering & Search
+django-filter==24.3
+
+
+
+# Utilities
+networkx==3.3
+pytz==2025.2
+python-dateutil==2.9.0.post0
+
+
+# Timezone Support
+pytz==2025.2
+
+# Testing (Development only)
+pytest==8.3.2
+pytest-django==4.8.0
+
+# Timezone utilities
+pytz==2025.2
+
+# Time utilities
+python-dateutil==2.9.0.post0
+
+# Timezone Data
+tzdata==2025.2
+
+
+
+
+
