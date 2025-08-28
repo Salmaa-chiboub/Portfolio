@@ -15,6 +15,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from decouple import config
 import dj_database_url
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,23 +25,28 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config("SECRET_KEY")
+load_dotenv()
+
+# For local development provide safe defaults so the app doesn't crash when
+# a .env is not present. In production ensure these are provided.
+SECRET_KEY = config("SECRET_KEY", default="dev-secret")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config("DEBUG", cast=bool)
+DEBUG = config("DEBUG", default="True", cast=bool)
 
-ALLOWED_HOSTS = config("ALLOWED_HOSTS").split(',')
+ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost").split(',')
 
 
 # Application definition
 
 INSTALLED_APPS = [
-    
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # API / auth
+    'rest_framework',
     'core',
     'skills',
     'projects',
@@ -89,6 +95,40 @@ DATABASES = {
         conn_health_checks=True,  # Enable connection health checks
     )
 }
+
+# Django REST Framework + Simple JWT settings
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}
+
+# Email configuration (read from .env)
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='webmaster@localhost')
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='')
+EMAIL_HOST = config('EMAIL_HOST', default='')
+EMAIL_PORT = config('EMAIL_PORT', default='')
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=False, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+
+# If EMAIL_HOST is configured but EMAIL_BACKEND not explicitly set, use SMTP
+if not EMAIL_BACKEND and EMAIL_HOST:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+
+# Fallback to console backend if nothing configured (safe for dev)
+if not EMAIL_BACKEND:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 
 # Password validation
