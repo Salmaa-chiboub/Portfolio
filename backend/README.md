@@ -17,18 +17,123 @@ copy .env.example .env
 # apply migrations and run
 python manage.py migrate
 python manage.py runserver
+
+Notes for the `core` app (media uploads)
+- Install extra dependencies if not present:
+	- python-dotenv (loads `.env`) : `pip install python-dotenv`
+	- Pillow (image support) : `pip install Pillow`
+
+- Media files (hero images, CVs) are served from `/media/` in development. Ensure `MEDIA_ROOT` exists or Django will create it.
+
+- To create migrations and apply them for the new core models:
+	```powershell
+	python manage.py makemigrations core
+	python manage.py migrate
+	```
+
 ```
 
 API endpoints (examples):
-- POST /api/users/register/  -> register
+API endpoints (examples):
 - POST /api/users/token/ -> obtain JWT (email as username)
 - POST /api/users/token/refresh/ -> refresh token
- - POST /api/users/login/ -> obtain JWT (email + password)
- - POST /api/users/token/refresh/ -> refresh token
+- POST /api/users/login/ -> obtain JWT (email + password) [superuser-only]
 - GET/PUT /api/users/me/ -> profile retrieve / update (requires Bearer token)
 - POST /api/users/change-password/ -> change password (authenticated)
-- POST /api/users/password-reset/ -> request reset link
-- POST /api/users/password-reset-confirm/?uid=<id>&token=<token> -> confirm reset
+- POST /api/users/password-reset/ -> request reset link (superuser-only)
+- POST /api/users/password-reset-confirm/?uid=<id>&token=<token> -> confirm reset (superuser-only)
+
+Testing `core` endpoints (public & admin)
+---------------------------------------
+
+Prerequisites
+- Server running locally at `http://localhost:8000` (see Quick local setup above).
+- Create a superuser for admin actions:
+
+```powershell
+python manage.py createsuperuser
+```
+
+- Obtain an access token (superuser only) using the login endpoint:
+
+```powershell
+#$env:ACCESS_JSON = curl.exe -s -X POST http://localhost:8000/api/users/login/ -H "Content-Type: application/json" -d '{"email":"admin@example.com","password":"YourPass"}'
+#$env:ACCESS_TOKEN = (ConvertFrom-Json $env:ACCESS_JSON).access
+# or use Postman to run POST /api/users/login/ and copy the access token into an environment variable
+```
+
+Public endpoints (no auth required)
+- GET /api/core/hero/  — returns active HeroSection(s).
+	Example (PowerShell + curl):
+
+```powershell
+curl.exe -s http://localhost:8000/api/core/hero/
+```
+
+- GET /api/core/about/  — returns About (singleton).
+
+```powershell
+curl.exe -s http://localhost:8000/api/core/about/
+```
+
+Admin endpoints (require superuser Bearer token)
+All admin endpoints require the HTTP header: `Authorization: Bearer <access_token>`
+
+- List/Create hero (singleton enforcement)
+	- GET /api/core/admin/hero/  — list all hero records (usually 0 or 1)
+	- POST /api/core/admin/hero/ — create hero (multipart/form-data for image)
+
+	Example (create with image — use Postman for easiest multipart upload):
+
+	Postman: create a new POST to `{{baseUrl}}/api/core/admin/hero/`, set Authorization to Bearer token, choose Body -> form-data and add fields:
+		- headline (text)
+		- subheadline (text)
+		- image (file)
+
+	Quick JSON example (no image):
+
+```powershell
+Invoke-RestMethod -Uri http://localhost:8000/api/core/admin/hero/ -Method Post -Headers @{ Authorization = "Bearer $env:ACCESS_TOKEN" } -Body (@{ headline = "Hello"; subheadline = "Subtitle" } | ConvertTo-Json) -ContentType 'application/json'
+```
+
+- GET/PUT/DELETE /api/core/admin/hero/<pk>/  — retrieve, update or delete the hero (admin only)
+
+- About (singleton)
+	- POST /api/core/admin/about/ — create About (use multipart/form-data for CV file)
+	- GET/PUT /api/core/admin/about/<pk>/ — retrieve/update About
+
+	Example update (JSON):
+
+```powershell
+Invoke-RestMethod -Uri http://localhost:8000/api/core/admin/about/1/ -Method Put -Headers @{ Authorization = "Bearer $env:ACCESS_TOKEN" } -Body (@{ title = "About Me"; description = "Updated" } | ConvertTo-Json) -ContentType 'application/json'
+```
+
+- Contacts (admin)
+	- GET /api/core/admin/contacts/ — list contact messages
+	- GET/DELETE /api/core/admin/contacts/<pk>/ — retrieve or delete a message
+
+	Example (list):
+
+```powershell
+curl.exe -H "Authorization: Bearer $env:ACCESS_TOKEN" http://localhost:8000/api/core/admin/contacts/
+```
+
+Notes and edge-cases
+- Hero and About are singletons — attempting to create a second instance will return a validation error.
+- File uploads (hero image, CV) are best tested via Postman or a simple frontend — PowerShell multipart file uploads are error-prone; prefer Postman for files.
+- If you get 403/401 responses for admin endpoints, ensure the token belongs to a superuser (`is_superuser=True`) and include `Authorization: Bearer <access_token>` header.
+- Contact creation is restricted to superusers in this API design — if you expect public contact submissions, tell me and I can expose `contact/` as public.
+
+Postman tips
+- Import `backend/postman/users.postman_collection.json` (already updated) then add new requests for the core endpoints above. Use the environment variable `access_token` (set after login) for the Authorization header.
+
+Important: admin-only write operations
+- Toutes les opérations de modification (POST, PUT, PATCH, DELETE) pour l'app `core` sont réservées aux comptes superuser (`is_superuser=True` dans la table `auth_user`).
+- Cela inclut : création / modification / suppression de HeroSection, About, et la création/liste/suppression des messages de contact via les endpoints `admin/*`.
+- Pour utiliser ces endpoints admin :
+ 	1) Créez un superuser : `python manage.py createsuperuser`
+ 	2) Récupérez un token admin via `/api/users/login/` (email/password)
+ 	3) Envoyez `Authorization: Bearer <access_token>` dans vos requêtes.
 
 Tester avec Postman
 --------------------
@@ -46,15 +151,7 @@ Tester avec Postman
 
 3) Exemple de flux de test
 
-- Register (création utilisateur)
-	- POST {{baseUrl}}/api/users/register/
-	- Body JSON:
-		{
-			"first_name": "Jean",
-			"last_name": "Dupont",
-			"email": "jean@example.com",
-			"password": "Str0ngP@ssw0rd"
-		}
+Note: user registration via API has been disabled. Create users using `createsuperuser` or via your React admin.
 
 - Obtenir token (email)
 	- POST {{baseUrl}}/api/users/token-email/

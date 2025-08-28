@@ -9,7 +9,6 @@ from rest_framework.permissions import IsAuthenticated
 
 from .serializers import (
 	UserSerializer,
-	RegisterSerializer,
 	ChangePasswordSerializer,
 	ResetPasswordSerializer,
 	LoginSerializer,
@@ -18,9 +17,10 @@ from .serializers import (
 User = get_user_model()
 
 
-class RegisterView(generics.CreateAPIView):
-	serializer_class = RegisterSerializer
-	permission_classes = [permissions.AllowAny]
+from core.permissions import IsSuperUser
+
+
+# Registration endpoint removed. Superusers should create users via admin React or manage.py createsuperuser.
 
 
 class ProfileView(generics.RetrieveUpdateAPIView):
@@ -52,7 +52,8 @@ class ChangePasswordView(generics.UpdateAPIView):
 
 class PasswordResetRequestView(generics.GenericAPIView):
 	serializer_class = ResetPasswordSerializer
-	permission_classes = [permissions.AllowAny]
+	# Password reset for admin accounts should be restricted to superusers
+	permission_classes = [IsSuperUser]
 
 	def post(self, request, *args, **kwargs):
 		serializer = self.get_serializer(data=request.data)
@@ -85,7 +86,8 @@ class PasswordResetRequestView(generics.GenericAPIView):
 
 
 class PasswordResetConfirmView(generics.GenericAPIView):
-	permission_classes = [permissions.AllowAny]
+	# Only superusers may confirm password reset for admin accounts
+	permission_classes = [IsSuperUser]
 
 	def post(self, request, *args, **kwargs):
 		uid = request.query_params.get('uid')

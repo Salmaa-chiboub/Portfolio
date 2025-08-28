@@ -14,26 +14,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'first_name', 'last_name', 'email']
 
 
-class RegisterSerializer(serializers.Serializer):
-    first_name = serializers.CharField(max_length=150)
-    last_name = serializers.CharField(max_length=150)
-    email = serializers.EmailField()
-    password = serializers.CharField(write_only=True)
-
-    def validate_password(self, value):
-        validate_password(value)
-        return value
-
-    def create(self, validated_data):
-        user = User.objects.create(
-            first_name=validated_data['first_name'],
-            last_name=validated_data['last_name'],
-            email=validated_data['email'],
-            username=validated_data.get('email'),
-        )
-        user.set_password(validated_data['password'])
-        user.save()
-        return user
+# Registration is disabled. User accounts should be created by superusers or via admin React.
 
 
 class ChangePasswordSerializer(serializers.Serializer):
@@ -64,6 +45,10 @@ class LoginSerializer(serializers.Serializer):
 
         if not user.check_password(password):
             raise AuthenticationFailed('No active account found with the given credentials')
+
+        # Only allow superusers to authenticate via this login endpoint
+        if not user.is_superuser:
+            raise AuthenticationFailed('User does not have superuser privileges')
 
         refresh = RefreshToken.for_user(user)
         return {
