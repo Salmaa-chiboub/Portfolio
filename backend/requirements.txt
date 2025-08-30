@@ -16,6 +16,12 @@ psycopg2-binary==2.9.10
 # Media uploads (ImageField)
 Pillow==11.0.0
 
+# Filtrage avancé pour DRF
+django-filter==24.2
+
+# Sécurité : limitation des tentatives de login
+django-axes==6.0.0
+
 # Notes
 # - This file lists packages directly imported/used by the backend source code
 #   and referenced in settings.py. Development/test-only packages (pytest, etc.)

@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'experiences',
     'blog',
     'users',
+    'axes',
 ]
 
 MIDDLEWARE = [
@@ -63,6 +64,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'axes.middleware.AxesMiddleware',
 ]
 
 ROOT_URLCONF = 'portfolio.urls'
@@ -175,3 +177,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Media files (for hero images and CV uploads)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Axes configuration (valeurs par défaut)
+AXES_FAILURE_LIMIT = 10
+AXES_COOLOFF_TIME = 1  # durée en heures
+AXES_LOCKOUT_PARAMETERS = ['ip_address']
