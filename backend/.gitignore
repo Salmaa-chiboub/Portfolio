@@ -11,7 +11,7 @@ db.sqlite3
 
 # Migrations (optionnel, tu peux les garder si tu bosses seule)
 */migrations/__pycache__/
-*/migrations/*.py
+# */migrations/*.py
 
 # Django stuff
 /staticfiles/
