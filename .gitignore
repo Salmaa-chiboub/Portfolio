@@ -3,7 +3,7 @@
 .idea/
 *.swp
 *.swo
-
+.venv
 # System files
 .DS_Store
 Thumbs.db
