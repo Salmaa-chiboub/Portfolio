@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
+from cloudinary.models import CloudinaryField
 
 from skills.models import Skill, SkillReference
 
@@ -33,7 +34,7 @@ class Project(models.Model):
 
 class ProjectMedia(models.Model):
 	project = models.ForeignKey(Project, related_name="media", on_delete=models.CASCADE)
-	image = models.ImageField(upload_to=project_media_upload_to)
+	image = CloudinaryField('image')  # Utilisation de CloudinaryField pour le stockage Cloudinary
 	order = models.PositiveSmallIntegerField(default=0)
 
 	class Meta:

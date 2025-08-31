@@ -3,12 +3,21 @@ from .models import Project, ProjectMedia, ProjectSkillRef
 from skills.models import Skill, SkillReference
 from rest_framework.exceptions import ValidationError
 from django.db import transaction
+import cloudinary.uploader
 
 
 class ProjectMediaSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
+
     class Meta:
         model = ProjectMedia
         fields = ("id", "image", "order")
+
+    def get_image(self, obj):
+        if obj.image:
+            return obj.image.url   # URL Cloudinary complète
+        return None
+
 
 
 class ProjectSerializer(serializers.ModelSerializer):

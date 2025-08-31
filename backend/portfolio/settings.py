@@ -44,7 +44,9 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'cloudinary_storage',  # Doit être avant staticfiles
     'django.contrib.staticfiles',
+    'cloudinary',
     # API / auth
     'rest_framework',
     'core',
@@ -164,21 +166,42 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+# Cloudinary configuration
+CLOUDINARY_URL = config('CLOUDINARY_URL', default=None)
+
+if not CLOUDINARY_URL:
+    CLOUDINARY_STORAGE = {
+        'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME'),
+        'API_KEY': config('CLOUDINARY_API_KEY'),
+        'API_SECRET': config('CLOUDINARY_API_SECRET'),
+    }
+
+# File Storage Settings
+# 👉 Seuls les fichiers uploadés par l'utilisateur (MEDIA) iront sur Cloudinary
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+
+# 👉 Les fichiers statiques (CSS, JS, images du projet) restent en local
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+
+# Static & Media
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # pour collectstatic en prod
+
+MEDIA_URL = '/media/'
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Media files (for hero images and CV uploads)
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
 # Axes configuration (valeurs par défaut)
 AXES_FAILURE_LIMIT = 10
 AXES_COOLOFF_TIME = 1  # durée en heures
 AXES_LOCKOUT_PARAMETERS = ['ip_address']
+
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]

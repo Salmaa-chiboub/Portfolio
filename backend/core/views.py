@@ -51,6 +51,13 @@ class PublicAboutView(generics.RetrieveAPIView):
     serializer_class = AboutSerializer
     permission_classes = [permissions.AllowAny]
 
+    def get_object(self):
+        about = About.objects.first()
+        if not about:
+            from rest_framework.exceptions import NotFound
+            raise NotFound("Aucune section About n'est disponible.")
+        return about
+
 
 class ContactCreateView(generics.CreateAPIView):
     queryset = ContactMessage.objects.all()

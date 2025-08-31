@@ -1,11 +1,13 @@
 from django.db import models
 from django.utils import timezone
+from cloudinary.models import CloudinaryField
+from cloudinary_storage.storage import RawMediaCloudinaryStorage
 
 
 class HeroSection(models.Model):
 	headline = models.CharField(max_length=200)
 	subheadline = models.CharField(max_length=400, blank=True)
-	image = models.ImageField(upload_to='hero/', blank=True, null=True)
+	image = CloudinaryField('image', blank=True, null=True)  # Remplacement par CloudinaryField
 	instagram = models.URLField(blank=True)
 	linkedin = models.URLField(blank=True)
 	github = models.URLField(blank=True)
@@ -32,7 +34,7 @@ class HeroSection(models.Model):
 class About(models.Model):
 	title = models.CharField(max_length=200, default='About')
 	description = models.TextField(blank=True)
-	cv = models.FileField(upload_to='cv/', blank=True, null=True)
+	cv = models.FileField(storage=RawMediaCloudinaryStorage(), blank=True, null=True)  # Suppression de l'argument incorrect
 	updated_at = models.DateTimeField(auto_now=True)
 
 	def __str__(self):

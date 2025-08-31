@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils.text import slugify
+from cloudinary.models import CloudinaryField
 
 
 class Post(models.Model):
@@ -22,7 +23,7 @@ class Post(models.Model):
 
 class Image(models.Model):
     post = models.ForeignKey(Post, related_name='images', on_delete=models.CASCADE)
-    image = models.ImageField(upload_to='blog_images/')
+    image = CloudinaryField('image')  # Remplacement par CloudinaryField
     caption = models.CharField(max_length=200, blank=True)
 
     def __str__(self):
