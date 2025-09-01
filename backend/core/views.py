@@ -62,9 +62,7 @@ class PublicAboutView(generics.RetrieveAPIView):
 class ContactCreateView(generics.CreateAPIView):
     queryset = ContactMessage.objects.all()
     serializer_class = ContactMessageSerializer
-    # Only superusers may create contact messages via API. All modifying operations
-    # in the `core` app are restricted to superusers (Django `is_superuser`).
-    permission_classes = [IsSuperUser]
+    permission_classes = [permissions.AllowAny]
 
 
 class ContactListAdminView(generics.ListAPIView):

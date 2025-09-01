@@ -35,6 +35,7 @@ class About(models.Model):
 	title = models.CharField(max_length=200, default='About')
 	description = models.TextField(blank=True)
 	cv = models.FileField(storage=RawMediaCloudinaryStorage(), blank=True, null=True)  # Suppression de l'argument incorrect
+	hiring_email = models.EmailField(blank=True, null=True)
 	updated_at = models.DateTimeField(auto_now=True)
 
 	def __str__(self):

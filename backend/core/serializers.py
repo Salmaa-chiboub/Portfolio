@@ -11,10 +11,30 @@ class HeroSectionSerializer(serializers.ModelSerializer):
 class AboutSerializer(serializers.ModelSerializer):
     class Meta:
         model = About
-        fields = ['id', 'title', 'description', 'cv', 'updated_at']
+        fields = ['id', 'title', 'description', 'cv', 'hiring_email', 'updated_at']
 
 
 class ContactMessageSerializer(serializers.ModelSerializer):
+    def validate_name(self, value):
+        if not value or len(value.strip()) < 2:
+            raise serializers.ValidationError("Le nom est trop court.")
+        return value.strip()
+
+    def validate_email(self, value):
+        if not value or "@" not in value:
+            raise serializers.ValidationError("Email invalide.")
+        return value.strip()
+
+    def validate_subject(self, value):
+        if value and len(value) > 200:
+            raise serializers.ValidationError("Sujet trop long.")
+        return value.strip() if value else value
+
+    def validate_message(self, value):
+        if not value or len(value.strip()) < 10:
+            raise serializers.ValidationError("Message trop court.")
+        return value.strip()
+
     class Meta:
         model = ContactMessage
         fields = ['id', 'name', 'email', 'subject', 'message', 'created_at', 'is_read']
