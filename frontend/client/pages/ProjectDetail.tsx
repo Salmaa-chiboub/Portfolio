@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
+import { ChevronLeft, ChevronRight, Github, ExternalLink } from "lucide-react";
 import { getApiUrl } from "@/lib/config";
 import { cn } from "@/lib/utils";
+import { createPortal } from "react-dom";
 
 type ProjectMedia = {
   id: number;
@@ -68,6 +70,15 @@ function parseSkills(skillsList?: unknown): string[] {
   return Array.from(new Set(names.filter(Boolean)));
 }
 
+// Helper function to split title into parts (all words except last in black, last word in orange)
+const splitTitle = (title: string) => {
+  const parts = title.trim().split(/\s+/);
+  if (parts.length <= 1) return { mainPart: title, lastWord: "" };
+  const lastWord = parts.pop() as string;
+  const mainPart = parts.join(" ");
+  return { mainPart, lastWord };
+};
+
 export default function ProjectDetail() {
   const params = useParams();
   const id = params.id as string | undefined;
@@ -77,6 +88,11 @@ export default function ProjectDetail() {
   const [error, setError] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [links, setLinks] = useState<{ id?: number; url: string; text?: string; order?: number }[]>([]);
+
+  // Fullscreen viewer state
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const openViewer = (index: number) => { setActiveIndex(index); setViewerOpen(true); };
+  const closeViewer = () => setViewerOpen(false);
 
   // initialize links if project provided via route state
   useEffect(() => {
@@ -113,6 +129,16 @@ export default function ProjectDetail() {
   const skills = useMemo(() => parseSkills(project?.skills_list), [project]);
 
   const mainImage = media[activeIndex]?.image || "/project-placeholder.svg";
+  const hasMultipleImages = media.length > 1;
+
+  // Navigation functions
+  const goToPrevious = () => {
+    setActiveIndex((prev) => (prev === 0 ? media.length - 1 : prev - 1));
+  };
+
+  const goToNext = () => {
+    setActiveIndex((prev) => (prev === media.length - 1 ? 0 : prev + 1));
+  };
 
   // Other projects
   const [otherProjects, setOtherProjects] = useState<Project[]>([]);
@@ -134,20 +160,53 @@ export default function ProjectDetail() {
       .finally(() => setOtherLoading(false));
   }, [id]);
 
+  // Close viewer on escape key
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeViewer();
+    };
+    if (viewerOpen) window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [viewerOpen]);
+
   return (
-    <section className="py-16 lg:py-24 bg-white min-h-screen">
-      <div className="container mx-auto max-w-7xl px-4">
-        <div className="mb-8">
-          <Link to="/" className="text-gray-text font-lufga hover:text-orange">← Back</Link>
+    <section className="pt-8 lg:pt-12 pb-16 lg:pb-24 bg-white min-h-screen">
+      <div className="container mx-auto max-w-8xl px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="mb-8 flex items-center justify-between gap-6">
+          {!loading && project && (
+            <div className="flex-1">
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-lufga font-bold leading-tight inline-block">
+                {(() => {
+                  const { mainPart, lastWord } = splitTitle(project.title);
+                  return (
+                    <>
+                      <span className="text-dark">{mainPart}{lastWord ? ' ' : ''}</span>
+                      <span className="text-orange">{lastWord}</span>
+                    </>
+                  );
+                })()}
+              </h1>
+              <div className="w-24 h-1 bg-orange rounded-full mt-3" />
+            </div>
+          )}
+
+          <div>
+            <Link
+              to="/"
+              className="inline-flex items-center px-6 py-3 rounded-full bg-orange text-white font-lufga font-semibold hover:bg-orange/90 transition-colors"
+            >
+              ← Back
+            </Link>
+          </div>
         </div>
 
         {loading && (
-          <div className="grid lg:grid-cols-2 gap-8">
-            <div className="h-[24rem] lg:h-[30rem] bg-gray-bg border border-gray-border rounded-3xl animate-pulse" />
+          <div className="space-y-8">
+            <div className="h-[20rem] lg:h-[30rem] bg-gray-bg border border-gray-border rounded-3xl animate-pulse mx-auto" style={{ width: "70%" }} />
             <div className="space-y-4">
               <div className="h-10 bg-gray-bg rounded-xl w-2/3" />
               <div className="h-24 bg-gray-bg rounded-xl" />
-              <div className="h-10 bg-gray-bg rounded-xl w-1/2" />
             </div>
           </div>
         )}
@@ -158,124 +217,145 @@ export default function ProjectDetail() {
 
         {!loading && project && (
           <div className="space-y-8">
-            {/* Top: 80% main image + 20% vertical thumbnails on large screens */}
-            <div className="grid lg:grid-cols-[4fr,1fr] gap-4 items-start">
-              {/* Main image */}
-              <div className="relative rounded-3xl overflow-hidden border border-gray-border bg-gray-bg">
-                <motion.img
-                  key={mainImage}
-                  loading="lazy"
-                  decoding="async"
-                  src={addCacheBuster(mainImage)}
-                  alt={project.title}
-                  className="w-full h-[24rem] lg:h-[36rem] object-contain"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.4, ease: "easeOut" }}
-                  onError={(e) => {
-                    const img = e.currentTarget as HTMLImageElement;
-                    if (img.src.includes("project-placeholder.svg")) return;
-                    img.onerror = null;
-                    img.src = "/project-placeholder.svg";
-                  }}
-                />
+            {/* Images Section */}
+            <div className="space-y-6">
+              {/* Main image container - 70% width, centered */}
+              <div className="relative mx-auto w-[95%] sm:w-[90%] md:w-[80%] lg:w-[70%]">
+                <div className="rounded-3xl overflow-hidden">
+                  <motion.img
+                    key={mainImage}
+                    loading="lazy"
+                    decoding="async"
+                    src={addCacheBuster(mainImage)}
+                    alt={project.title}
+                    className="w-full h-[16rem] sm:h-[18rem] md:h-[22rem] lg:h-[30rem] object-cover cursor-zoom-in"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.4, ease: "easeOut" }}
+                    onError={(e) => {
+                      const img = e.currentTarget as HTMLImageElement;
+                      if (img.src.includes("project-placeholder.svg")) return;
+                      img.onerror = null;
+                      img.src = "/project-placeholder.svg";
+                    }}
+                    onDoubleClick={() => openViewer(activeIndex)}
+                  />
+                </div>
+
+                {/* Navigation buttons positioned further outside the image container */}
+                {hasMultipleImages && (
+                  <>
+                    <button
+                      onClick={goToPrevious}
+                      className="absolute left-4 lg:-left-20 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 bg-white/95 hover:bg-white border border-gray-border rounded-full flex items-center justify-center shadow-lg transition-colors z-50"
+                      aria-label="Previous image"
+                    >
+                      <ChevronLeft className="w-5 h-5 text-gray-text" />
+                    </button>
+                    <button
+                      onClick={goToNext}
+                      className="absolute right-4 lg:-right-20 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 bg-white/95 hover:bg-white border border-gray-border rounded-full flex items-center justify-center shadow-lg transition-colors z-50"
+                      aria-label="Next image"
+                    >
+                      <ChevronRight className="w-5 h-5 text-gray-text" />
+                    </button>
+                  </>
+                )}
               </div>
 
-              {/* Vertical thumbnails (lg+) */}
-              <div className="hidden lg:block max-h-[36rem] overflow-y-auto pr-1">
-                <div className="flex flex-col gap-3">
-                  {(media.length ? media : [{ id: -1, image: "/project-placeholder.svg", order: 0 }]).map((m, i) => (
+              {/* Pagination dots - Figma design */}
+              {hasMultipleImages && (
+                <div className="flex items-center justify-center gap-3">
+                  {media.map((_, index) => (
                     <button
-                      key={m.id}
-                      onClick={() => setActiveIndex(i)}
+                      key={index}
+                      onClick={() => setActiveIndex(index)}
                       className={cn(
-                        "relative w-full h-20 rounded-xl overflow-hidden border bg-white",
-                        i === activeIndex ? "border-orange" : "border-gray-border"
+                        "transition-all duration-200 border-0 bg-transparent p-0",
+                        index === activeIndex
+                          ? "w-16 h-4 bg-orange rounded-full"
+                          : "w-4 h-4 bg-gray-border rounded-full hover:bg-gray-light"
                       )}
-                      aria-pressed={i === activeIndex}
-                    >
-                      <img
-                        loading="lazy"
-                        decoding="async"
-                        src={addCacheBuster(m.image)}
-                        alt={`${project.title} ${i + 1}`}
-                        className={cn("w-full h-full object-contain", i !== activeIndex ? "opacity-80" : "opacity-100")}
-                        onError={(e) => {
-                          const img = e.currentTarget as HTMLImageElement;
-                          if (img.src.includes("project-placeholder.svg")) return;
-                          img.onerror = null;
-                          img.src = "/project-placeholder.svg";
-                        }}
-                      />
-                      {i === activeIndex && <span className="absolute inset-0 ring-2 ring-orange rounded-xl pointer-events-none" />}
-                    </button>
+                      aria-label={`Go to image ${index + 1}`}
+                    />
                   ))}
+                </div>
+              )}
+            </div>
+
+            {/* Content Section */}
+            <div className={cn(
+              "grid gap-8",
+              skills.length > 0 || links.length > 0 
+                ? "lg:grid-cols-[7fr,3fr]" 
+                : "lg:grid-cols-1"
+            )}>
+              {/* Description - 70% or full width */}
+              <div className="space-y-4">
+                <div 
+                  className="text-gray-text font-lufga text-base lg:text-lg leading-relaxed whitespace-pre-wrap"
+                  dangerouslySetInnerHTML={
+                    project.description.includes("<") 
+                      ? { __html: project.description }
+                      : undefined
+                  }
+                >
+                  {!project.description.includes("<") && project.description}
                 </div>
               </div>
 
-              {/* Horizontal thumbnails (mobile/tablet) */}
-              <div className="mt-4 flex gap-3 overflow-x-auto pb-1 lg:hidden col-span-full">
-                {(media.length ? media : [{ id: -1, image: "/project-placeholder.svg", order: 0 }]).map((m, i) => (
-                  <button
-                    key={m.id}
-                    onClick={() => setActiveIndex(i)}
-                    className={cn(
-                      "relative w-24 h-16 rounded-xl overflow-hidden border",
-                      i === activeIndex ? "border-orange" : "border-gray-border"
-                    )}
-                    aria-pressed={i === activeIndex}
-                  >
-                    <img
-                      loading="lazy"
-                      decoding="async"
-                      src={addCacheBuster(m.image)}
-                      alt={`${project.title} ${i + 1}`}
-                      className={cn("w-full h-full object-contain bg-white", i !== activeIndex ? "opacity-80" : "opacity-100")}
-                      onError={(e) => {
-                        const img = e.currentTarget as HTMLImageElement;
-                        if (img.src.includes("project-placeholder.svg")) return;
-                        img.onerror = null;
-                        img.src = "/project-placeholder.svg";
-                      }}
-                    />
-                    {i === activeIndex && <span className="absolute inset-0 ring-2 ring-orange rounded-xl pointer-events-none" />}
-                  </button>
-                ))}
-              </div>
-            </div>
+              {/* Sidebar - Stack and Links - 30% */}
+              {(skills.length > 0 || links.length > 0) && (
+                <div className="space-y-8">
+                  {/* Stack */}
+                  {skills.length > 0 && (
+                    <div>
+                      <h2 className="text-xl lg:text-2xl font-lufga font-bold text-dark mb-4">Stack</h2>
+                      <div className="flex flex-wrap gap-2">
+                        {skills.slice(0, 12).map((s, i) => (
+                          <span 
+                            key={`${s}-${i}`} 
+                            className="px-4 py-2 rounded-full bg-gray-bg border border-gray-border text-gray-text text-sm font-lufga"
+                          >
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-            {/* Below: title + description */}
-            <div className="space-y-4">
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-lufga font-bold text-gray-text">{project.title}</h1>
-              <p className="text-gray-text font-lufga text-base lg:text-lg leading-relaxed whitespace-pre-wrap">{project.description}</p>
-            </div>
-
-            {/* Actions and Stack: links left, stack right */}
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
-              <div className="flex flex-wrap gap-3">
-                {links && links.length > 0 ? links.map((l) => (
-                  <a key={l.id || l.url} href={l.url} target="_blank" rel="noreferrer" className="inline-flex items-center px-6 py-3 rounded-full bg-gray-bg border border-gray-border text-gray-text font-lufga text-base lg:text-lg hover:bg-gray-bg/70">{l.text || l.url}</a>
-                )) : null}
-              </div>
-
-              {skills.length > 0 && (
-                <div className="sm:text-right sm:self-start">
-                  <h2 className="text-lg font-lufga font-bold text-dark mb-2">Stack</h2>
-                  <ul className="flex flex-wrap gap-2 justify-start sm:justify-end">
-                    {skills.slice(0, 8).map((s, i) => (
-                      <li key={`${s}-${i}`} className="px-3 py-1 rounded-full bg-gray-bg border border-gray-border text-gray-text text-xs font-lufga">
-                        {s}
-                      </li>
-                    ))}
-                  </ul>
+                  {/* Links */}
+                  {links.length > 0 && (
+                    <div>
+                      <h2 className="text-xl lg:text-2xl font-lufga font-bold text-dark mb-4">Links</h2>
+                      <div className="flex flex-col gap-3">
+                        {links.map((l) => {
+                          const isGithub = (l.text || "").toLowerCase().includes("github") || (l.url || "").toLowerCase().includes("github");
+                          const label = (l.text && l.text.trim()) ? l.text : (l.url ? l.url.replace(/^https?:\/\//, '').replace(/^www\./, '').split(/[/?#]/)[0] : 'Link');
+                          return (
+                            <a
+                              key={l.id || l.url}
+                              href={l.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-3 text-gray-text hover:text-orange transition-colors"
+                            >
+                              {isGithub ? <Github className="w-5 h-5 text-gray-text" /> : <ExternalLink className="w-5 h-5 text-gray-text" />}
+                              <span className="font-lufga text-base">{label}</span>
+                            </a>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
             {/* Other projects */}
             {suggestions.length > 0 && (
-              <div className="pt-4">
-                <h2 className="text-2xl sm:text-3xl font-lufga font-bold text-gray-text mb-4">Other Projects</h2>
+              <div className="pt-8">
+                <h2 className="text-2xl sm:text-3xl font-lufga font-bold text-gray-text mb-6">Other Projects</h2>
                 <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
                   {suggestions.map((p: any) => (
                     <div key={p.id} className="rounded-2xl border border-gray-border bg-white p-3">
@@ -309,6 +389,16 @@ export default function ProjectDetail() {
             )}
           </div>
         )}
+
+        {viewerOpen && typeof document !== 'undefined' ? createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-start sm:items-center justify-center bg-black/80 p-4 overflow-auto">
+            <button onClick={closeViewer} className="absolute top-6 right-6 w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow-lg z-50" aria-label="Close viewer">✕</button>
+            <div className="max-w-[95vw] max-h-[95vh] my-8">
+              <img src={addCacheBuster(media[activeIndex]?.image || "/project-placeholder.svg")} alt={project.title} className="w-full max-h-[90vh] object-contain rounded-md" />
+            </div>
+          </div>,
+          document.body
+        ) : null}
       </div>
     </section>
   );

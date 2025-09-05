@@ -133,6 +133,15 @@ export default function ProjectsCarousel() {
     }));
   }, [projects]);
 
+  const splitTitle = (t: string) => {
+    const s = (t || "").trim();
+    if (!s) return { pre: "", last: "" };
+    const parts = s.split(/\s+/);
+    if (parts.length === 1) return { pre: parts[0], last: "" };
+    const last = parts.pop() as string;
+    return { pre: parts.join(" "), last };
+  };
+
   const n = ordered.length;
 
   const prev = useCallback(() => {
@@ -248,7 +257,7 @@ export default function ProjectsCarousel() {
                           onClick={() => navigate(`/projects/${project.id}`, { state: { project } })}
                           aria-label={`Open ${project.title}`}
                         >
-                          <div className="relative w-full h-72 rounded-[40px] overflow-hidden bg-white shadow-[0_4px_55px_0_rgba(0,0,0,0.05)]">
+                          <div className="relative w-full h-72 rounded-[20px] overflow-hidden bg-white shadow-[0_4px_55px_0_rgba(0,0,0,0.05)]">
                             <img
                               src={addCacheBuster(primaryImage)}
                               alt={project.title}
@@ -260,33 +269,53 @@ export default function ProjectsCarousel() {
                                 img.src = "/project-placeholder.svg";
                               }}
                             />
+                            {/* Gradient overlay */}
+                            <div className="absolute inset-0 bg-gradient-to-br from-transparent via-black/25 to-black/50" />
+
+
+                            {/* Glass morphism content */}
+                            <div className="absolute bottom-0 left-0 right-0 p-8 lg:p-10 backdrop-blur-[12.5px] bg-black/40 rounded-[32px] min-h-[200px]">
+                              <div className="flex justify-between items-start gap-4">
+                                <div className="flex-1 min-w-0 pr-4">
+                                  <h3 className="font-lufga font-bold text-3xl sm:text-4xl lg:text-5xl text-white mb-3 leading-tight truncate project-card-title">
+                                    {(() => {
+                                      const parts = splitTitle(project.title);
+                                      return (
+                                        <>
+                                          <span className="text-white">{parts.pre && parts.pre + (parts.last ? ' ' : '')}</span>
+                                          <span className="text-orange">{parts.last}</span>
+                                        </>
+                                      );
+                                    })()}
+                                  </h3>
+                                  <p className="font-lufga text-sm text-orange-lighter leading-relaxed line-clamp-3">
+                                    {excerpt(project.description, 140)}
+                                  </p>
+                                </div>
+                                <div className="flex-shrink-0 flex flex-wrap gap-2 justify-end">
+                                  {project.links && project.links.length > 0 ? project.links.slice(0,6).map((l) => {
+                                    const isGithub = (l.text || "").toLowerCase().includes("github") || (l.url || "").toLowerCase().includes("github");
+                                    const label = (l.text && l.text.trim()) ? l.text : (l.url ? l.url.replace(/^https?:\/\//, '').replace(/^www\./, '').split(/[/?#]/)[0] : 'Link');
+                                    return (
+                                      <a
+                                        key={l.id || l.url}
+                                        href={l.url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white text-sm font-lufga"
+                                        onClick={(e) => e.stopPropagation()}
+                                        aria-label={isGithub ? `Open ${label}` : `Open ${label}`}
+                                      >
+                                        {isGithub ? <Github className="w-4 h-4 text-white" /> : <ExternalLink className="w-4 h-4 text-white" />}
+                                        <span className="truncate max-w-[120px]">{label}</span>
+                                      </a>
+                                    );
+                                  }) : null}
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </button>
-                        <div className="mt-3 flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <h3 className="font-lufga font-bold text-gray-text text-base truncate" title={project.title}>
-                              {project.title}
-                            </h3>
-                            <p className="text-gray-lighter font-lufga text-sm truncate">{excerpt(project.description)}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {project.links && project.links.length > 0 ? project.links.slice(0,2).map((l) => {
-                              const isGithub = (l.text || "").toLowerCase().includes("github") || (l.url || "").toLowerCase().includes("github");
-                              return (
-                                <a
-                                  key={l.id || l.url}
-                                  href={l.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className={"p-2 rounded-full " + (isGithub ? "bg_gray_link bg-gray-bg border border-gray-border hover:bg-gray-bg/70" : "bg-orange text-white hover:bg-orange/90")}
-                                  aria-label={isGithub ? "Open GitHub" : "Open link"}
-                                >
-                                  {isGithub ? <Github className="w-4 h-4 text-gray-text" /> : <ExternalLink className="w-4 h-4" />}
-                                </a>
-                              );
-                            }) : null}
-                          </div>
-                        </div>
                       </div>
                     );
                   })}
@@ -355,7 +384,7 @@ export default function ProjectsCarousel() {
                           }
                         }}
                       >
-                        <div className="relative w-full h-full rounded-[40px] overflow-hidden bg-white shadow-[0_4px_55px_0_rgba(0,0,0,0.05)] group-hover:shadow-[0_8px_70px_0_rgba(0,0,0,0.15)] transition-shadow duration-300">
+                        <div className="relative w-full h-full rounded-[20px] overflow-hidden bg-white shadow-[0_4px_55px_0_rgba(0,0,0,0.05)] group-hover:shadow-[0_8px_70px_0_rgba(0,0,0,0.15)] transition-shadow duration-300">
                           <div className="w-full h-full overflow-hidden relative">
                             <img
                               src={addCacheBuster(primaryImage)}
@@ -368,32 +397,51 @@ export default function ProjectsCarousel() {
                                 img.src = "/project-placeholder.svg";
                               }}
                             />
-                          </div>
-                        </div>
-                        <div className="mt-3 sm:mt-4 flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <h3 className="font-lufga font-bold text-gray-text text-sm sm:text-base md:text-lg truncate" title={project.title}>
-                              {project.title}
-                            </h3>
-                            <p className="text-gray-lighter font-lufga text-xs sm:text-sm truncate">{excerpt(project.description, 90)}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {project.links && project.links.length > 0 ? project.links.slice(0,2).map((l) => {
-                              const isGithub = (l.text || "").toLowerCase().includes("github") || (l.url || "").toLowerCase().includes("github");
-                              return (
-                                <a
-                                  key={l.id || l.url}
-                                  href={l.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className={"p-2 rounded-full " + (isGithub ? "bg_gray_link bg-gray-bg border border-gray-border hover:bg-gray-bg/70" : "bg-orange text-white hover:bg-orange/90")}
-                                  onClick={(e) => e.stopPropagation()}
-                                  aria-label={isGithub ? "Open GitHub" : "Open link"}
-                                >
-                                  {isGithub ? <Github className="w-4 h-4 text-gray-text" /> : <ExternalLink className="w-4 h-4" />}
-                                </a>
-                              );
-                            }) : null}
+                            {/* Gradient overlay */}
+                            <div className="absolute inset-0 bg-gradient-to-br from-transparent via-black/25 to-black/50" />
+
+
+                            {/* Glass morphism content */}
+                            <div className="absolute bottom-0 left-0 right-0 p-8 lg:p-10 backdrop-blur-[12.5px] bg-black/40 rounded-[32px] min-h-[200px]">
+                              <div className="flex justify-between items-start gap-2 lg:gap-4">
+                                <div className="flex-1 min-w-0 pr-4">
+                                  <h3 className="font-lufga font-bold text-3xl lg:text-4xl xl:text-5xl text-white mb-3 leading-tight truncate project-card-title">
+                                    {(() => {
+                                      const parts = splitTitle(project.title);
+                                      return (
+                                        <>
+                                          <span className="text-white">{parts.pre && parts.pre + (parts.last ? ' ' : '')}</span>
+                                          <span className="text-orange">{parts.last}</span>
+                                        </>
+                                      );
+                                    })()}
+                                  </h3>
+                                  <p className="font-lufga text-xs lg:text-sm text-orange-lighter leading-relaxed line-clamp-3">
+                                    {excerpt(project.description, off === 0 ? 140 : 100)}
+                                  </p>
+                                </div>
+                                <div className="flex-shrink-0 flex flex-wrap gap-2 justify-end">
+                                  {project.links && project.links.length > 0 ? project.links.slice(0,6).map((l) => {
+                                    const isGithub = (l.text || "").toLowerCase().includes("github") || (l.url || "").toLowerCase().includes("github");
+                                    const label = (l.text && l.text.trim()) ? l.text : (l.url ? l.url.replace(/^https?:\/\//, '').replace(/^www\./, '').split(/[/?#]/)[0] : 'Link');
+                                    return (
+                                      <a
+                                        key={l.id || l.url}
+                                        href={l.url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white text-sm font-lufga"
+                                        onClick={(e) => e.stopPropagation()}
+                                        aria-label={isGithub ? `Open ${label}` : `Open ${label}`}
+                                      >
+                                        {isGithub ? <Github className="w-3 lg:w-4 h-3 lg:h-4 text-white" /> : <ExternalLink className="w-3 lg:w-4 h-3 lg:h-4 text-white" />}
+                                        <span className="truncate max-w-[120px]">{label}</span>
+                                      </a>
+                                    );
+                                  }) : null}
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>

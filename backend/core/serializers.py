@@ -3,14 +3,23 @@ from .models import HeroSection, About, ContactMessage
 
 
 class HeroSectionSerializer(serializers.ModelSerializer):
-    image = serializers.SerializerMethodField() 
+    # Expose image URL for read, but allow image uploads via standard ImageField for write
+    image = serializers.ImageField(required=False, allow_null=True)
+
     class Meta:
         model = HeroSection
         fields = ['id', 'headline', 'subheadline', 'image', 'instagram', 'linkedin', 'github', 'order', 'is_active']
-    def get_image(self, obj):
-        if obj.image:
-            return obj.image.url   # URL Cloudinary complète
-        return None
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        if getattr(instance, 'image'):
+            try:
+                rep['image'] = instance.image.url
+            except Exception:
+                rep['image'] = None
+        else:
+            rep['image'] = None
+        return rep
 
 
 class AboutSerializer(serializers.ModelSerializer):

@@ -4,6 +4,7 @@ from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.core.mail import send_mail
+from django.conf import settings
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import AuthenticationFailed
@@ -54,7 +55,7 @@ class ForgotPasswordSerializer(serializers.Serializer):
         send_mail(
             subject="Password Reset Request",
             message=f"Click the link to reset your password: {reset_link}",
-            from_email="no-reply@example.com",
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'no-reply@example.com'),
             recipient_list=[email],
         )
         return {"message": "Password reset link has been sent to your email"}

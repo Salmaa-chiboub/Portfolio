@@ -61,8 +61,14 @@ export default function Blogs() {
   return (
     <section className="py-16 lg:py-24 bg-white">
       <div className="container mx-auto max-w-7xl px-4">
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-12 space-y-6 lg:space-y-0">
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-lufga font-bold text-gray-text">All Blog Posts</h1>
+        <div className="mb-8 flex items-center justify-between gap-6">
+          <div className="flex-1">
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-lufga font-bold text-gray-text inline-block">All Blog Posts</h1>
+            <div className="w-24 h-1 bg-orange rounded-full mt-3" />
+          </div>
+          <div>
+            <button onClick={() => navigate(-1)} className="inline-flex items-center px-6 py-3 rounded-full bg-orange text-white font-lufga font-semibold hover:bg-orange/90 transition-colors">← Back</button>
+          </div>
         </div>
         {items.length === 0 ? (
           <div className="text-gray-text">No blogs available.</div>

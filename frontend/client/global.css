@@ -149,10 +149,39 @@ html {
   .text-balance {
     text-wrap: balance;
   }
+
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
 
 /* Blog image container rounding and overlay */
 @layer components {
+  .experience-bubble-title {
+    max-width: 45ch;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: normal;
+    hyphens: none;
+    text-align: center;
+  }
+
+  .project-card-title {
+    display: inline-block;
+    border-bottom: 2px solid #FD853A;
+    padding-bottom: 0.5rem; /* 8px */
+    margin-bottom: 0.75rem; /* 12px */
+  }
   .blog-image-mask {
     border-radius: 37px 37px 8px 37px;
   }

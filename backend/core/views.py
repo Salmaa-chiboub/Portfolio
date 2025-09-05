@@ -27,6 +27,19 @@ class HeroAdminDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = HeroSectionSerializer
     permission_classes = [IsSuperUser]
 
+    def update(self, request, *args, **kwargs):
+        # Support clearing the image from admin by passing image-clear=1 in form data
+        instance = self.get_object()
+        if request.data.get('image-clear') in ['1', 'true', 'True']:
+            try:
+                if instance.image:
+                    instance.image.delete(save=False)
+            except Exception:
+                pass
+            instance.image = None
+            instance.save()
+        return super().update(request, *args, **kwargs)
+
 
 class AboutDetailView(generics.RetrieveUpdateAPIView):
     queryset = About.objects.all()

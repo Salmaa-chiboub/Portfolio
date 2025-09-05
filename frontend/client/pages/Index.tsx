@@ -564,6 +564,46 @@ export default function Index() {
   const skillsStart = skillsPage * perPage;
   const paginatedSkills = skills.slice(skillsStart, skillsStart + perPage);
 
+  // Calculate dynamic min height based on current breakpoint columns and number of rows
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const compute = () => {
+      const w = window.innerWidth;
+      // determine columns based on Tailwind breakpoints used in the grid
+      let cols = 2;
+      if (w >= 1280) cols = 6; // xl
+      else if (w >= 1024) cols = 5; // lg
+      else if (w >= 768) cols = 4; // md
+      else if (w >= 640) cols = 3; // sm
+      else cols = 2; // base
+
+      // determine item height in px based on tailwind classes (h-16, sm:h-20, md:h-24, lg:h-28)
+      let itemH = 64; // h-16 = 4rem = 64px
+      if (w >= 1024) itemH = 112; // lg:h-28 = 7rem
+      else if (w >= 768) itemH = 96; // md:h-24 = 6rem
+      else if (w >= 640) itemH = 80; // sm:h-20 = 5rem
+      else itemH = 64;
+
+      // gap sizes in px for gap-2..gap-6
+      let gap = 8;
+      if (w >= 1280) gap = 24; // xl: gap-6
+      else if (w >= 1024) gap = 20; // lg: gap-5
+      else if (w >= 768) gap = 16; // md: gap-4
+      else if (w >= 640) gap = 12; // sm: gap-3
+      else gap = 8; // base gap-2
+
+      const visibleCount = paginatedSkills.length || 0;
+      const rows = visibleCount > 0 ? Math.ceil(visibleCount / cols) : 0;
+      const minH = rows > 0 ? rows * itemH + Math.max(0, rows - 1) * gap : 0;
+      setSkillsGridMinH(minH);
+    };
+
+    compute();
+    const onResize = () => compute();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [paginatedSkills, perPage, skills.length]);
+
   const pageDirRef = useRef(1);
   const skillsWheelRef = useRef<HTMLDivElement | null>(null);
   const goPrevSkillsPage = () => {
@@ -982,7 +1022,7 @@ export default function Index() {
                 <div className="relative z-10">
                   <motion.img
                     loading="eager"
-                    fetchpriority="high"
+                    fetchPriority="high"
                     decoding="async"
                     src={(hero?.image && hero.image.trim() !== "") ? addCacheBuster(hero.image) : addCacheBuster("/caracter.png")}
                     alt="Salma Chiboub - Product Designer"
@@ -1126,7 +1166,7 @@ export default function Index() {
 
       {/* Services Section (Section 3) - lazy render */}
       <div ref={servicesRef}>
-        {showServices && (skillsLoading || skills.length > 0) ? (
+        {(skillsLoading || skills.length > 0) ? (
           <section
             id="services"
             className="py-16 lg:py-24 bg-dark rounded-t-[50px] relative z-0 overflow-hidden"
@@ -1241,20 +1281,16 @@ export default function Index() {
               )}
             </div>
           </section>
-        ) : (
-          <div style={{ minHeight: 420 }} />
-        )}
+        ) : <div style={{ height: 80 }} />}
       </div>
 
       {/* Experiences Section */}
   <div ref={experiencesRef}>
-    {showExperiences ? (
-      <Suspense fallback={<div style={{ minHeight: 420 }} />}>
+    {(expLoading || (expTotalCount ?? experiences.length) > 0) ? (
+      <Suspense fallback={null}>
         <ExperiencesSectionLazy />
       </Suspense>
-    ) : (
-      <div style={{ minHeight: 420 }} />
-    )}
+    ) : <div style={{ height: 80 }} />}
   </div>
 
 

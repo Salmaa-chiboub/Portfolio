@@ -79,7 +79,12 @@ export default function AdminHeroAbout() {
       fd.append("is_active", hero.is_active ? "true" : "false");
 
       const file = heroFiles[id];
-      if (file) fd.append("image", file);
+      if (file) {
+        fd.append("image", file);
+      } else {
+        // If hero.image is falsy and no file uploaded, instruct backend to clear image
+        if (!hero.image) fd.append("image-clear", "1");
+      }
 
       const res = await fetchWithAuth(getApiUrl(`/api/core/admin/hero/${id}/`), {
         method: "PUT",
@@ -163,8 +168,18 @@ export default function AdminHeroAbout() {
                       <div className="sm:col-span-2 space-y-2">
                         <label className="text-sm text-gray-light">Headline</label>
                         <Input value={h.headline} onChange={(e) => setHeroes((prev) => prev.map((x) => x.id === h.id ? { ...x, headline: e.target.value } : x))} />
+
                         <label className="text-sm text-gray-light">Subheadline</label>
                         <Textarea value={h.subheadline} onChange={(e) => setHeroes((prev) => prev.map((x) => x.id === h.id ? { ...x, subheadline: e.target.value } : x))} rows={3} />
+
+                        <label className="text-sm text-gray-light">Instagram URL</label>
+                        <Input value={h.instagram || ""} onChange={(e) => setHeroes((prev) => prev.map((x) => x.id === h.id ? { ...x, instagram: e.target.value } : x))} placeholder="https://instagram.com/yourprofile" />
+
+                        <label className="text-sm text-gray-light">LinkedIn URL</label>
+                        <Input value={h.linkedin || ""} onChange={(e) => setHeroes((prev) => prev.map((x) => x.id === h.id ? { ...x, linkedin: e.target.value } : x))} placeholder="https://linkedin.com/in/yourprofile" />
+
+                        <label className="text-sm text-gray-light">Github URL</label>
+                        <Input value={h.github || ""} onChange={(e) => setHeroes((prev) => prev.map((x) => x.id === h.id ? { ...x, github: e.target.value } : x))} placeholder="https://github.com/yourusername" />
 
                       </div>
                       <div className="flex flex-col items-start gap-2">

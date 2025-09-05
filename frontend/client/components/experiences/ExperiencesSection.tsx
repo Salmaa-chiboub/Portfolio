@@ -343,23 +343,16 @@ function TimelineRow({
           style={{
             top: bubbleTop ? `${bubbleTop}px` : "50%",
             left: onLeft ? "calc(75%)" : "calc(25%)",
-            transform: "translate(-50%, -50%)",
+            transform: "translate(-50%, calc(-50% - 4px))",
             zIndex: 2,
           }}
         >
-          <div className="w-24 h-24 bg-orange rounded-full flex items-center justify-center shadow-lg">
-            <span className="text-white font-urbanist font-bold text-5xl leading-none">{idx + 1}</span>
+          <div className="flex flex-col items-center">
+            <div className="w-28 h-28 bg-orange rounded-full flex items-center justify-center shadow-lg">
+              <span className="text-white font-urbanist font-bold text-4xl leading-none">{idx + 1}</span>
+            </div>
+            <div className="mt-2 experience-bubble-title text-dark font-lufga font-bold text-sm lg:text-base">{exp.title}</div>
           </div>
-        </div>
-        <div
-          className={cn("hidden lg:block absolute", onLeft ? "-right-4" : "-left-4")}
-          style={{ top: bubbleTop ? `${bubbleTop}px` : "50%", transform: "translateY(-50%)" }}
-        >
-          {onLeft ? (
-            <ChevronRight className="w-7 h-7 text-orange" />
-          ) : (
-            <ChevronLeft className="w-7 h-7 text-orange" />
-          )}
         </div>
 
         {onLeft ? (
