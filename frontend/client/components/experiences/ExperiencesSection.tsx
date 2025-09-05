@@ -175,7 +175,7 @@ export default function ExperiencesSection() {
 
   return (
     <>
-      <section id="resume" className="relative z-20 py-12 lg:py-16 bg-white">
+      <section id="resume" className="relative z-20 py-12 lg:py-16 bg-background">
           <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.9, ease: "easeOut" }} className="container mx-auto max-w-7xl px-4">
             <div className="text-center mb-12 lg:mb-16">
               <motion.h2
@@ -306,113 +306,187 @@ function TimelineRow({
   const start = formatMonthYear(exp.start_date);
   const end = exp.is_current ? "Present" : formatMonthYear(exp.end_date);
   const skills = (exp.skills || []).slice(0, 5);
-  const fillerOffset = onLeft ? "14rem" : "0rem";
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const cardRef = useRef<HTMLElement | null>(null);
+  const [bubbleTop, setBubbleTop] = useState<number | null>(null);
+
+  useEffect(() => {
+    const update = () => {
+      const row = rowRef.current;
+      const card = cardRef.current as HTMLElement | null;
+      if (!row || !card) return;
+      const rowRect = row.getBoundingClientRect();
+      const cardRect = card.getBoundingClientRect();
+      const top = (cardRect.top - rowRect.top) + cardRect.height / 2;
+      setBubbleTop(top);
+    };
+    update();
+    const onResize = () => requestAnimationFrame(update);
+    window.addEventListener("resize", onResize);
+    const t = window.setTimeout(update, 60);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.clearTimeout(t);
+    };
+  }, [expanded, exp.description, exp.title, exp.company, start, end]);
 
   return (
-    <div className={cn("relative", onLeft ? "lg:pt-0" : "lg:pt-12")}> 
+    <div ref={rowRef} className={cn("relative lg:py-12")}>
       {/* Dot */}
       <div className="hidden lg:block absolute left-1/2 -translate-x-1/2 top-3 w-6 h-6 bg-orange rounded-full shadow-lg" />
 
-      {/* Row grid */}
+      {/* Row grid: two cols (card | empty) with absolute center bubble */}
       <div className="grid lg:grid-cols-2 items-stretch gap-6 lg:gap-10">
-        {/* Filler side */}
-        <div className={cn("hidden lg:block relative h-full", onLeft ? "lg:col-start-2" : "lg:col-start-1")}>
-          <div className={cn("absolute inset-x-0 -translate-y-[70px] flex flex-col items-center justify-center")} style={{ top: `calc(50% + ${fillerOffset})` }}>
-            <motion.div
-              className={cn("flex flex-col items-center", onLeft ? "justify-start" : "justify-center")}
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true, amount: 0.4 }}
-              transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }}
-            >
-              <div className="w-24 h-24 bg-orange rounded-full flex items-center justify-center shadow-lg">
-                <span className="text-white font-urbanist font-bold text-5xl leading-none">{idx + 1}</span>
-              </div>
-              <div className="mt-3 font-lufga text-sm lg:text-base text-center break-words whitespace-normal">
-                <div className="text-dark font-bold break-words whitespace-normal">{exp.title}</div>
-                <div className="text-gray-light">
-                  <span>{exp.company}</span>
-                  <span className="mx-1">•</span>
-                  <span>{start}</span>
-                  <span className="mx-1">-</span>
-                  <span>{end}</span>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-          <div
-            className={cn("pointer-events-none absolute -translate-y-1/2", onLeft ? "left-0 -translate-x-1/2" : "right-0 translate-x-1/2")}
-            style={{ top: `calc(50% + ${fillerOffset})` }}
-          >
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.5, ease: "easeOut", delay: 0.2 }}>
-              {onLeft ? (
-                <ChevronLeft className="w-7 h-7 text-orange" />
-              ) : (
-                <ChevronRight className="w-7 h-7 text-orange" />
-              )}
-            </motion.div>
+        {/* Number bubble in side space (not on the timeline) */}
+        <div
+          className="hidden lg:block absolute"
+          style={{
+            top: bubbleTop ? `${bubbleTop}px` : "50%",
+            left: onLeft ? "calc(75%)" : "calc(25%)",
+            transform: "translate(-50%, -50%)",
+            zIndex: 2,
+          }}
+        >
+          <div className="w-24 h-24 bg-orange rounded-full flex items-center justify-center shadow-lg">
+            <span className="text-white font-urbanist font-bold text-5xl leading-none">{idx + 1}</span>
           </div>
         </div>
+        <div
+          className={cn("hidden lg:block absolute", onLeft ? "-right-4" : "-left-4")}
+          style={{ top: bubbleTop ? `${bubbleTop}px` : "50%", transform: "translateY(-50%)" }}
+        >
+          {onLeft ? (
+            <ChevronRight className="w-7 h-7 text-orange" />
+          ) : (
+            <ChevronLeft className="w-7 h-7 text-orange" />
+          )}
+        </div>
 
-        {/* Card side */}
-        <div className={cn(onLeft ? "lg:col-start-1" : "lg:col-start-2", "self-center")}> 
-          <motion.article
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.5 }}
-            transition={{ duration: 0.7, ease: "easeOut" }}
-            className={cn("border border-gray-border rounded-2xl p-5 lg:p-6 bg-white shadow-sm", onLeft ? "" : "")}
-          >
-            <header className="mb-2">
-              <h3 className="text-2xl lg:text-3xl font-lufga font-bold text-dark mb-1">{exp.title}</h3>
-              <div className="text-sm lg:text-base font-lufga text-gray-light">
-                <span>{start}</span>
-                <span className="mx-1">-</span>
-                <span>{end}</span>
-                <span className="mx-2">•</span>
-                <span>{exp.company}</span>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {exp.location && (
-                  <span className="px-3 py-1 rounded-full bg-gray-bg border border-gray-border text-gray-text text-xs font-lufga">
-                    {exp.location}
-                  </span>
-                )}
-                {exp.experience_type && (
-                  <span className="px-3 py-1 rounded-full bg-orange/10 border border-orange/30 text-orange text-xs font-lufga">
-                    {exp.experience_type}
-                  </span>
-                )}
-              </div>
-            </header>
-
-            <p className="text-gray-text font-lufga text-base lg:text-lg leading-relaxed whitespace-pre-wrap mb-3">
-              {expanded ? exp.description : truncate(exp.description, 220)}
-            </p>
-            {exp.description && exp.description.length > 220 && (
-              <button
-                onClick={() => setExpanded()}
-                className="text-orange font-lufga text-sm lg:text-base mb-3"
-                aria-expanded={!!expanded}
+        {onLeft ? (
+          <>
+            <div className="self-center">
+              <motion.article ref={cardRef as any}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.5 }}
+                transition={{ duration: 0.7, ease: "easeOut" }}
+                className="border border-gray-border rounded-2xl p-5 lg:p-6 bg-white shadow-sm"
               >
-                {expanded ? "Show less" : "Read more"}
-              </button>
-            )}
+                <header className="mb-2">
+                  <h3 className="text-2xl lg:text-3xl font-lufga font-bold text-dark mb-1">{exp.title}</h3>
+                  <div className="text-sm lg:text-base font-lufga text-gray-light">
+                    <span>{start}</span>
+                    <span className="mx-1">-</span>
+                    <span>{end}</span>
+                    <span className="mx-2">•</span>
+                    <span>{exp.company}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {exp.location && (
+                      <span className="px-3 py-1 rounded-full bg-gray-bg border border-gray-border text-gray-text text-xs font-lufga">
+                        {exp.location}
+                      </span>
+                    )}
+                    {exp.experience_type && (
+                      <span className="px-3 py-1 rounded-full bg-orange/10 border border-orange/30 text-orange text-xs font-lufga">
+                        {exp.experience_type}
+                      </span>
+                    )}
+                  </div>
+                </header>
 
-            {skills.length > 0 && (
-              <ul className="flex flex-wrap gap-2">
-                {skills.map((s) => (
-                  <li key={s.id} className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-bg border border-gray-border text-gray-text text-sm">
-                    {s.icon ? (
-                      <img loading="lazy" decoding="async" src={s.icon} alt={s.name} className="w-4 h-4 object-contain transition-opacity duration-700" />
-                    ) : null}
-                    <span>{s.name}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </motion.article>
-        </div>
+                <p className="text-gray-text font-lufga text-base lg:text-lg leading-relaxed whitespace-pre-wrap mb-3">
+                  {expanded ? exp.description : truncate(exp.description, 220)}
+                </p>
+                {exp.description && exp.description.length > 220 && (
+                  <button
+                    onClick={() => setExpanded()}
+                    className="text-orange font-lufga text-sm lg:text-base mb-3"
+                    aria-expanded={!!expanded}
+                  >
+                    {expanded ? "Show less" : "Read more"}
+                  </button>
+                )}
+
+                {skills.length > 0 && (
+                  <ul className="flex flex-wrap gap-2">
+                    {skills.map((s) => (
+                      <li key={s.id} className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-bg border border-gray-border text-gray-text text-sm">
+                        {s.icon ? (
+                          <img loading="lazy" decoding="async" src={s.icon} alt={s.name} className="w-4 h-4 object-contain transition-opacity duration-700" />
+                        ) : null}
+                        <span>{s.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </motion.article>
+            </div>
+            <div className="hidden lg:block" />
+          </>
+        ) : (
+          <>
+            <div className="hidden lg:block" />
+            <div className="self-center">
+              <motion.article ref={cardRef as any}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.5 }}
+                transition={{ duration: 0.7, ease: "easeOut" }}
+                className="border border-gray-border rounded-2xl p-5 lg:p-6 bg-white shadow-sm"
+              >
+                <header className="mb-2">
+                  <h3 className="text-2xl lg:text-3xl font-lufga font-bold text-dark mb-1">{exp.title}</h3>
+                  <div className="text-sm lg:text-base font-lufga text-gray-light">
+                    <span>{start}</span>
+                    <span className="mx-1">-</span>
+                    <span>{end}</span>
+                    <span className="mx-2">•</span>
+                    <span>{exp.company}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {exp.location && (
+                      <span className="px-3 py-1 rounded-full bg-gray-bg border border-gray-border text-gray-text text-xs font-lufga">
+                        {exp.location}
+                      </span>
+                    )}
+                    {exp.experience_type && (
+                      <span className="px-3 py-1 rounded-full bg-orange/10 border border-orange/30 text-orange text-xs font-lufga">
+                        {exp.experience_type}
+                      </span>
+                    )}
+                  </div>
+                </header>
+
+                <p className="text-gray-text font-lufga text-base lg:text-lg leading-relaxed whitespace-pre-wrap mb-3">
+                  {expanded ? exp.description : truncate(exp.description, 220)}
+                </p>
+                {exp.description && exp.description.length > 220 && (
+                  <button
+                    onClick={() => setExpanded()}
+                    className="text-orange font-lufga text-sm lg:text-base mb-3"
+                    aria-expanded={!!expanded}
+                  >
+                    {expanded ? "Show less" : "Read more"}
+                  </button>
+                )}
+
+                {skills.length > 0 && (
+                  <ul className="flex flex-wrap gap-2">
+                    {skills.map((s) => (
+                      <li key={s.id} className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-bg border border-gray-border text-gray-text text-sm">
+                        {s.icon ? (
+                          <img loading="lazy" decoding="async" src={s.icon} alt={s.name} className="w-4 h-4 object-contain transition-opacity duration-700" />
+                        ) : null}
+                        <span>{s.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </motion.article>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

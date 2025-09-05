@@ -211,7 +211,7 @@ export default function ProjectsCarousel() {
   const containerH = Math.max(380, Math.round(base.containerH * scale));
 
   return (
-    <section id="project" className="py-12 lg:py-16 bg-white">
+    <section id="project" className="py-12 lg:py-16 bg-background">
       <div className="container mx-auto max-w-7xl px-4">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-12 space-y-6 lg:space-y-0">
           <h2 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-lufga font-bold leading-tight max-w-2xl">

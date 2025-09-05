@@ -1,10 +1,11 @@
-import ExperiencesSection from "@/components/experiences/ExperiencesSection";
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import ProjectsCarousel from "@/components/projects/ProjectsCarousel";
 import { getApiUrl } from "@/lib/config";
 import { cn } from "@/lib/utils";
+
+const ExperiencesSectionLazy = lazy(() => import("@/components/experiences/ExperiencesSection"));
+const ProjectsCarouselLazy = lazy(() => import("@/components/projects/ProjectsCarousel"));
 import {
   ChevronLeft,
   ChevronRight,
@@ -170,12 +171,14 @@ export default function Index() {
   const servicesRef = useRef<HTMLDivElement | null>(null);
   const experiencesRef = useRef<HTMLDivElement | null>(null);
   const projectsRef = useRef<HTMLDivElement | null>(null);
+  const ctaRef = useRef<HTMLDivElement | null>(null);
   const blogRef = useRef<HTMLDivElement | null>(null);
   const contactRef = useRef<HTMLDivElement | null>(null);
 
   const [showServices, setShowServices] = useState(false);
   const [showExperiences, setShowExperiences] = useState(false);
   const [showProjects, setShowProjects] = useState(false);
+  const [showCta, setShowCta] = useState(false);
   const [showBlog, setShowBlog] = useState(false);
   const [showContact, setShowContact] = useState(false);
 
@@ -198,6 +201,7 @@ export default function Index() {
       if (servicesRef.current) createObs(servicesRef, () => setShowServices(true));
       if (experiencesRef.current) createObs(experiencesRef, () => setShowExperiences(true));
       if (projectsRef.current) createObs(projectsRef, () => setShowProjects(true));
+      if (ctaRef.current) createObs(ctaRef, () => setShowCta(true));
       if (blogRef.current) createObs(blogRef, () => setShowBlog(true));
       if (contactRef.current) createObs(contactRef, () => setShowContact(true));
     } catch (e) {
@@ -650,7 +654,7 @@ export default function Index() {
     return (lastSpace > 40 ? cut.slice(0, lastSpace) : cut).trim() + "…";
   };
 
-  const showExperiences = expLoading || ((expTotalCount ?? experiences.length) > 0);
+  const hasExperiences = expLoading || ((expTotalCount ?? experiences.length) > 0);
 
   // Blogs state
   const [blogs, setBlogs] = useState<BlogPost[]>([]);
@@ -1111,7 +1115,7 @@ export default function Index() {
                   </div>
 
                   <div className="space-y-6">
-                    <div className="text-muted-foreground font-lufga text-lg lg:text-xl leading-relaxed" dangerouslySetInnerHTML={{ __html: about?.description || "I'm a software engineering student passionate about building reliable, user-centric applications. I turn complex problems into simple, maintainable solutions using modern web technologies. 'Programs must be written for people to read, and only incidentally for machines to execute.' — Harold Abelson." }} />
+                    <div className="text-muted-foreground font-lufga text-lg lg:text-xl leading-relaxed" dangerouslySetInnerHTML={{ __html: about?.description || "I'm a software engineering student passionate about building reliable, user-centric applications. I turn complex problems into simple, maintainable solutions using modern web technologies. 'Programs must be written for people to read, and only incidentally for machines to execute.' �� Harold Abelson." }} />
                   </div>
                 </div>
               </>
@@ -1120,205 +1124,251 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Services Section */}
-      {(skillsLoading || skills.length > 0) && (
-      <section
-        id="services"
-        className="py-16 lg:py-24 bg-dark rounded-t-[50px] relative z-0 overflow-hidden"
-      >
-        {/* Background decorative elements */}
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute top-20 right-0 w-96 h-96 bg-orange-light rounded-full blur-3xl transform translate-x-1/2"></div>
-          <div className="absolute top-10 left-1/3 w-48 h-48 bg-orange-light rounded-full blur-2xl transform -rotate-45"></div>
-          <div className="absolute top-0 left-0 w-72 h-96 bg-orange-light rounded-full blur-2xl transform -translate-x-1/2 rotate-45"></div>
-        </div>
+      {/* Services Section (Section 3) - lazy render */}
+      <div ref={servicesRef}>
+        {showServices && (skillsLoading || skills.length > 0) ? (
+          <section
+            id="services"
+            className="py-16 lg:py-24 bg-dark rounded-t-[50px] relative z-0 overflow-hidden"
+          >
+            <div className="absolute inset-0 opacity-30">
+              <div className="absolute top-20 right-0 w-96 h-96 bg-orange-light rounded-full blur-3xl transform translate-x-1/2"></div>
+              <div className="absolute top-10 left-1/3 w-48 h-48 bg-orange-light rounded-full blur-2xl transform -rotate-45"></div>
+              <div className="absolute top-0 left-0 w-72 h-96 bg-orange-light rounded-full blur-2xl transform -translate-x-1/2 rotate-45"></div>
+            </div>
 
-        <div className="container mx-auto max-w-7xl px-4 relative z-10">
-          {/* Section header - Responsive */}
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-16 lg:mb-24 space-y-6 lg:space-y-0">
-            <motion.h2
-              initial={{ opacity: 0, y: 14 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.5 }}
-              transition={{ duration: 0.7, ease: "easeOut" }}
-              className="text-3xl sm:text-4xl lg:text-5xl font-lufga font-medium"
-            >
-              <span className="text-white">Tech </span>
-              <span className="text-orange">Stack</span>
-            </motion.h2>
-          </div>
-
-          {/* Skills grid - Responsive with animation */}
-          <div className="px-2 sm:px-4 md:px-6 lg:px-10 xl:px-14">
-            <div className="grid grid-cols-[auto,1fr,auto] items-center gap-2 sm:gap-3 md:gap-4">
-              <div className="flex justify-start">
-                {totalSkillPages > 1 && (
-                  <button
-                    onClick={goPrevSkillsPage}
-                    aria-label="Previous skills page"
-                    className="w-10 h-10 lg:w-12 lg:h-12 bg-white/10 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/20 disabled:opacity-40 disabled:pointer-events-none"
-                    disabled={skillsPage === 0}
-                  >
-                    <ChevronLeft className="w-6 h-6 text-white" />
-                  </button>
-                )}
+            <div className="container mx-auto max-w-7xl px-4 relative z-10">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-16 lg:mb-24 space-y-6 lg:space-y-0">
+                <motion.h2
+                  initial={{ opacity: 0, y: 14 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.5 }}
+                  transition={{ duration: 0.7, ease: "easeOut" }}
+                  className="text-3xl sm:text-4xl lg:text-5xl font-lufga font-medium"
+                >
+                  <span className="text-white">Tech </span>
+                  <span className="text-orange">Stack</span>
+                </motion.h2>
               </div>
-              <div style={{ minHeight: skillsGridMinH }} ref={skillsWheelRef} className="relative mb-6">
-            <AnimatePresence initial={false} mode="wait" custom={pageDirRef.current}>
-              <motion.div
-                key={skillsPage}
-                custom={pageDirRef.current}
-                variants={skillsPageVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ type: "spring", stiffness: 260, damping: 30, mass: 0.8 }}
-                className="absolute inset-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4 lg:gap-5 xl:gap-6"
-                style={{ willChange: "transform" }}
-                onTouchStart={handleSkillsTouchStart}
-                onTouchMove={handleSkillsTouchMove}
-                onTouchEnd={handleSkillsTouchEnd}
-              >
-              {skillsLoading &&
-                Array.from({ length: 6 }).map((_, i) => (
-                  <div
-                    key={`skeleton-${i}`}
-                    className="animate-pulse bg-white/10 rounded-3xl h-40 border border-white/10"
-                  ></div>
-                ))}
 
-
-              {!skillsLoading &&
-                paginatedSkills.map((item) => (
-                  <div key={item.id} className="relative group">
-                    <div className="relative bg-gray-400/20 backdrop-blur-lg border border-white/20 rounded-3xl p-1 sm:p-1.5 md:p-2 h-16 sm:h-20 md:h-24 lg:h-28 flex flex-col items-center justify-center text-center">
-                      <img
-                        loading="lazy"
-                        decoding="async"
-                        src={item.reference.icon}
-                        alt={item.reference.name}
-                        className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 object-contain mb-1 sm:mb-2 transition-opacity duration-700"
-                      />
-                      <h3 className="text-white font-lufga text-xs sm:text-sm md:text-base font-medium truncate w-full">
-                        {item.reference.name}
-                      </h3>
-                    </div>
+              <div className="px-2 sm:px-4 md:px-6 lg:px-10 xl:px-14">
+                <div className="grid grid-cols-[auto,1fr,auto] items-center gap-2 sm:gap-3 md:gap-4">
+                  <div className="flex justify-start">
+                    {totalSkillPages > 1 && (
+                      <button
+                        onClick={goPrevSkillsPage}
+                        aria-label="Previous skills page"
+                        className="w-10 h-10 lg:w-12 lg:h-12 bg-white/10 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/20 disabled:opacity-40 disabled:pointer-events-none"
+                        disabled={skillsPage === 0}
+                      >
+                        <ChevronLeft className="w-6 h-6 text-white" />
+                      </button>
+                    )}
                   </div>
-                ))}
-              </motion.div>
-            </AnimatePresence>
+                  <div style={{ minHeight: skillsGridMinH }} ref={skillsWheelRef} className="relative mb-6">
+                    <AnimatePresence initial={false} mode="wait" custom={pageDirRef.current}>
+                      <motion.div
+                        key={skillsPage}
+                        custom={pageDirRef.current}
+                        variants={skillsPageVariants}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ type: "spring", stiffness: 260, damping: 30, mass: 0.8 }}
+                        className="absolute inset-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4 lg:gap-5 xl:gap-6"
+                        style={{ willChange: "transform" }}
+                        onTouchStart={handleSkillsTouchStart}
+                        onTouchMove={handleSkillsTouchMove}
+                        onTouchEnd={handleSkillsTouchEnd}
+                      >
+                        {skillsLoading &&
+                          Array.from({ length: 6 }).map((_, i) => (
+                            <div
+                              key={`skeleton-${i}`}
+                              className="animate-pulse bg-white/10 rounded-3xl h-40 border border-white/10"
+                            ></div>
+                          ))}
 
+                        {!skillsLoading &&
+                          paginatedSkills.map((item) => (
+                            <div key={item.id} className="relative group">
+                              <div className="relative bg-gray-400/20 backdrop-blur-lg border border-white/20 rounded-3xl p-1 sm:p-1.5 md:p-2 h-16 sm:h-20 md:h-24 lg:h-28 flex flex-col items-center justify-center text-center">
+                                <img
+                                  loading="lazy"
+                                  decoding="async"
+                                  src={item.reference.icon}
+                                  alt={item.reference.name}
+                                  className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 object-contain mb-1 sm:mb-2 transition-opacity duration-700"
+                                />
+                                <h3 className="text-white font-lufga text-xs sm:text-sm md:text-base font-medium truncate w-full">
+                                  {item.reference.name}
+                                </h3>
+                              </div>
+                            </div>
+                          ))}
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+                  <div className="flex justify-end">
+                    {totalSkillPages > 1 && (
+                      <button
+                        onClick={goNextSkillsPage}
+                        aria-label="Next skills page"
+                        className="w-10 h-10 lg:w-12 lg:h-12 bg-white/10 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/20 disabled:opacity-40 disabled:pointer-events-none"
+                        disabled={skillsPage >= totalSkillPages - 1}
+                      >
+                        <ChevronRight className="w-6 h-6 text-white" />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-end">
-                {totalSkillPages > 1 && (
-                  <button
-                    onClick={goNextSkillsPage}
-                    aria-label="Next skills page"
-                    className="w-10 h-10 lg:w-12 lg:h-12 bg-white/10 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/20 disabled:opacity-40 disabled:pointer-events-none"
-                    disabled={skillsPage >= totalSkillPages - 1}
-                  >
-                    <ChevronRight className="w-6 h-6 text-white" />
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
 
-          {/* Pagination dots */}
-          {totalSkillPages > 1 && (
-            <div className="flex justify-center space-x-3">
-              {Array.from({ length: totalSkillPages }).map((_, i) => (
-                <button
-                  key={i}
-                  aria-label={`Go to skills page ${i + 1}`}
-                  onClick={() => {
-                      pageDirRef.current = i > skillsPage ? 1 : -1;
-                      setSkillsPage(i);
-                    }}
-                  className={`w-3 h-3 rounded-full transition-colors ${i === skillsPage ? "bg-orange" : "bg-white"}`}
-                />
-              ))}
+              {totalSkillPages > 1 && (
+                <div className="flex justify-center space-x-3">
+                  {Array.from({ length: totalSkillPages }).map((_, i) => (
+                    <button
+                      key={i}
+                      aria-label={`Go to skills page ${i + 1}`}
+                      onClick={() => {
+                        pageDirRef.current = i > skillsPage ? 1 : -1;
+                        setSkillsPage(i);
+                      }}
+                      className={`w-3 h-3 rounded-full transition-colors ${i === skillsPage ? "bg-orange" : "bg-white"}`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </section>
-      )}
+          </section>
+        ) : (
+          <div style={{ minHeight: 420 }} />
+        )}
+      </div>
 
       {/* Experiences Section */}
   <div ref={experiencesRef}>
-    {showExperiences ? <ExperiencesSection /> : <div style={{minHeight: 420}} />}
+    {showExperiences ? (
+      <Suspense fallback={<div style={{ minHeight: 420 }} />}>
+        <ExperiencesSectionLazy />
+      </Suspense>
+    ) : (
+      <div style={{ minHeight: 420 }} />
+    )}
   </div>
 
 
   {/* Projects Section */}
   <div ref={projectsRef}>
-    {showProjects ? <ProjectsCarousel /> : <div style={{minHeight: 420}} />}
+    {showProjects ? (
+      <Suspense fallback={<div style={{ minHeight: 420 }} />}>
+        <ProjectsCarouselLazy />
+      </Suspense>
+    ) : (
+      <div style={{ minHeight: 420 }} />
+    )}
   </div>
 
-      {/* Testimonials Section */}
-      <section className="py-16 lg:py-24 bg-dark rounded-[50px] relative overflow-hidden">
-        {/* Background decorative elements */}
-        <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-20 right-0 w-96 h-96 bg-orange-light rounded-full blur-3xl transform translate-x-1/2"></div>
-          <div className="absolute bottom-20 left-0 w-96 h-96 bg-orange-light rounded-full blur-3xl transform -translate-x-1/2"></div>
-        </div>
+      {/* CTA Section (Section 6) - lazy render */}
+      <div ref={ctaRef}>
+        {showCta ? (
+          <section className="py-16 lg:py-24 bg-dark rounded-[50px] relative overflow-hidden">
+            <div className="absolute inset-0 opacity-20">
+              <div className="absolute top-20 right-0 w-96 h-96 bg-orange-light rounded-full blur-3xl transform translate-x-1/2"></div>
+              <div className="absolute bottom-20 left-0 w-96 h-96 bg-orange-light rounded-full blur-3xl transform -translate-x-1/2"></div>
+            </div>
 
-        <div className="container mx-auto max-w-7xl px-4 relative z-10">
-          <div className="text-center py-10 lg:py-16 space-y-8">
-            <motion.h2
-              initial={{ opacity: 0, y: 14 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.5 }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-              className="text-2xl sm:text-4xl lg:text-5xl font-lufga font-bold"
+            <div className="container mx-auto max-w-7xl px-4 relative z-10">
+              <div className="text-center py-10 lg:py-16 space-y-8">
+                <motion.h2
+                  initial={{ opacity: 0, y: 14 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.5 }}
+                  transition={{ duration: 0.8, ease: "easeOut" }}
+                  className="text-2xl sm:text-4xl lg:text-5xl font-lufga font-bold"
+                >
+                  <span className="text-white">Have an Awesome Project Idea? </span>
+                  <span className="text-orange">Let's Discuss</span>
+                </motion.h2>
+                <div className="mt-8">
+                  <a
+                    href="#contact"
+                    className="inline-flex items-center gap-3 sm:gap-4 px-8 py-5 sm:px-12 sm:py-6 lg:px-14 lg:py-7 bg-orange rounded-full text-white font-lufga text-xl sm:text-2xl lg:text-3xl font-bold hover:bg-orange/90 transition-colors shadow-lg"
+                  >
+                    <Send className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8" />
+                    Let’s Contact
+                  </a>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : (
+          <div style={{ minHeight: 300 }} />
+        )}
+      </div>
+
+
+      {/* Skills/Services stripe (Section 7) - Animated marquee design */}
+      <section className="relative overflow-hidden mt-10 md:mt-12 lg:mt-16" style={{ height: '130px' }}>
+        <div className="absolute inset-0 bg-orange rounded-r-[24px] flex items-center justify-end">
+          <div className="absolute inset-0 overflow-hidden">
+            <div
+              className="absolute left-[-10%] w-[220%]"
+              style={{ height: '120px', top: '15%', transform: 'rotate(-2deg)' }}
             >
-              <span className="text-white">Have an Awesome Project Idea? </span>
-              <span className="text-orange">Let's Discuss</span>
-            </motion.h2>
-            <div className="mt-8">
-              <a
-                href="#contact"
-                className="inline-flex items-center gap-3 sm:gap-4 px-8 py-5 sm:px-12 sm:py-6 lg:px-14 lg:py-7 bg-orange rounded-full text-white font-lufga text-xl sm:text-2xl lg:text-3xl font-bold hover:bg-orange/90 transition-colors shadow-lg"
+              <motion.div
+                className="bg-white flex items-center gap-4 w-[200%]"
+                animate={{ x: ['0%', '-50%'] }}
+                transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
               >
-                <Send className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8" />
-                Let’s Contact
-              </a>
+                {/* First set of items */}
+                <span className="text-black font-lufga text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-normal tracking-tight whitespace-nowrap px-4">
+                  Software Engineering
+                </span>
+                <Star className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 xl:w-9 xl:h-9 fill-orange text-orange flex-shrink-0" />
+                <span className="text-black font-lufga text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-normal tracking-tight whitespace-nowrap px-4">
+                  Web Development
+                </span>
+                <Star className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 xl:w-9 xl:h-9 fill-orange text-orange flex-shrink-0" />
+                <span className="text-black font-lufga text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-normal tracking-tight whitespace-nowrap px-4">
+                  APIs
+                </span>
+                <Star className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 xl:w-9 xl:h-9 fill-orange text-orange flex-shrink-0" />
+                <span className="text-black font-lufga text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-normal tracking-tight whitespace-nowrap px-4">
+                  DevOps
+                </span>
+                <Star className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 xl:w-9 xl:h-9 fill-orange text-orange flex-shrink-0" />
+                <span className="text-black font-lufga text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-normal tracking-tight whitespace-nowrap px-4">
+                  Cloud Computing
+                </span>
+                <Star className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 xl:w-9 xl:h-9 fill-orange text-orange flex-shrink-0" />
+
+                {/* Repeated set for seamless loop */}
+                <span className="text-black font-lufga text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-normal tracking-tight whitespace-nowrap px-4">
+                  Software Engineering
+                </span>
+                <Star className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 xl:w-9 xl:h-9 fill-orange text-orange flex-shrink-0" />
+                <span className="text-black font-lufga text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-normal tracking-tight whitespace-nowrap px-4">
+                  Web Development
+                </span>
+                <Star className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 xl:w-9 xl:h-9 fill-orange text-orange flex-shrink-0" />
+                <span className="text-black font-lufga text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-normal tracking-tight whitespace-nowrap px-4">
+                  APIs
+                </span>
+                <Star className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 xl:w-9 xl:h-9 fill-orange text-orange flex-shrink-0" />
+                <span className="text-black font-lufga text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-normal tracking-tight whitespace-nowrap px-4">
+                  DevOps
+                </span>
+                <Star className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 xl:w-9 xl:h-9 fill-orange text-orange flex-shrink-0" />
+                <span className="text-black font-lufga text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-normal tracking-tight whitespace-nowrap px-4">
+                  Cloud Computing
+                </span>
+                <Star className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 xl:w-9 xl:h-9 fill-orange text-orange flex-shrink-0" />
+              </motion.div>
             </div>
           </div>
         </div>
       </section>
-
-      {/* Contact Section */}
-  <section ref={contactRef} className="py-16 lg:py-24 bg-dark rounded-t-[50px] relative overflow-hidden">
-    <div className="absolute inset-0 opacity-30">
-      <div className="absolute top-20 right-0 w-96 h-96 bg-orange-light rounded-full blur-3xl transform translate-x-1/2"></div>
-      <div className="absolute bottom-20 left-0 w-96 h-96 bg-orange-light rounded-full blur-3xl transform -translate-x-1/2"></div>
-    </div>
-    <div className="container mx-auto max-w-4xl px-4 text-center space-y-12 relative z-10">
-      {showContact ? (
-        <></>
-      ) : (
-        <div style={{minHeight: 200}} />
-      )}
-    </div>
-  </section>
-
-      {/* Skills Marquee */}
-      <div className="bg-orange rounded-t-3xl h-32 lg:h-36 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-12 lg:h-16 bg-white transform -rotate-2 flex items-center justify-center">
-          <div className="flex items-center space-x-6 lg:space-x-8 text-black font-lufga text-3xl lg:text-5xl animate-pulse">
-            <span>Software Engineering</span>
-            <Star className="w-6 h-6 lg:w-8 lg:h-8 fill-orange text-orange" />
-            <span>Web Development</span>
-            <Star className="w-6 h-6 lg:w-8 lg:h-8 fill-orange text-orange" />
-            <span>APIs</span>
-            <Star className="w-6 h-6 lg:w-8 lg:h-8 fill-orange text-orange" />
-            <span>DevOps</span>
-            <Star className="w-6 h-6 lg:w-8 lg:h-8 fill-orange text-orange" />
-            <span>Cloud</span>
-          </div>
-        </div>
-      </div>
 
       {/* Divider between Stack and Blog */}
       <div className="py-4 bg-background">
@@ -1332,82 +1382,91 @@ export default function Index() {
         />
       </div>
 
-      {/* Blog Section */}
-      {(!blogsLoading && blogs.length > 0) && (
-      <section id="blog" className="py-16 lg:py-24 bg-background">
-        <div className="container mx-auto max-w-7xl px-4">
-          {/* Section header */}
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-12 space-y-6 lg:space-y-0">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-lufga font-bold text-muted-foreground">
-              From my blog post
-            </h2>
-            <button onClick={() => navigate("/blog")} className="flex items-center px-8 lg:px-10 py-4 lg:py-5 bg-orange rounded-full">
-              <span className="text-white font-lufga text-lg lg:text-xl font-bold">
-                See All
-              </span>
-            </button>
-          </div>
-
-          {/* Blog posts - Responsive grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 lg:gap-10">
-            {blogs.map((post) => {
-              const img = (post.images && post.images[0]?.image) || "/project-placeholder.svg";
-              const dateStr = formatMonthYear(post.created_at);
-              return (
-                <article key={post.id} className="flex flex-col space-y-8">
-                  <button
-                    onClick={() => navigate(`/blog/${post.slug}`)}
-                    className="group cursor-pointer focus:outline-none focus:ring-4 focus:ring-orange/30 blog-image-frame overflow-hidden transition-all duration-300"
-                    aria-label={`Read blog post: ${post.title}`}
-                  >
-                    <div className="relative group-hover:shadow-2xl transition-shadow duration-300 blog-image-frame overflow-hidden">
-                      <div className="relative w-full h-[400px] lg:h-[432px] shadow-[0_4px_55px_0_rgba(0,0,0,0.05)] group-hover:shadow-[0_8px_70px_0_rgba(0,0,0,0.15)] transition-shadow duration-300 blog-image-frame overflow-hidden">
-                        <div className="w-full h-full overflow-hidden relative blog-image-mask">
-                          <img
-                            loading="lazy"
-                            decoding="async"
-                            src={addCacheBuster(img)}
-                            alt={post.title}
-                            className="absolute inset-0 block w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 rounded-none"
-                          />
-                          <div className="absolute bottom-0 right-0 w-16 h-16 lg:w-20 lg:h-20">
-                            <div className="w-full h-full blog-corner-cutout"></div>
-                          </div>
-                          <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        </div>
-                        <div className="absolute bottom-2 right-2 lg:bottom-3 lg:right-3">
-                          <div className="w-16 h-16 lg:w-[72px] lg:h-[72px] bg-[#1D2939] group-hover:bg-[#FD853A] rounded-full flex items-center justify-center -rotate-90 group-hover:rotate-0 transition-all duration-300 shadow-lg group-hover:shadow-xl">
-                            <ArrowUpRight className="w-7 h-7 lg:w-8 lg:h-8 text-white rotate-90 group-hover:scale-110 transition-transform duration-300" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+      {/* Blog Section (Section 8) - lazy render */}
+      <div ref={blogRef}>
+        {showBlog ? (
+          (!blogsLoading && blogs.length > 0) ? (
+            <section id="blog" className="py-16 lg:py-24 bg-background">
+              <div className="container mx-auto max-w-7xl px-4">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-12 space-y-6 lg:space-y-0">
+                  <h2 className="text-3xl sm:text-4xl lg:text-5xl font-lufga font-bold text-muted-foreground">
+                    From my blog post
+                  </h2>
+                  <button onClick={() => navigate("/blog")} className="flex items-center px-8 lg:px-10 py-4 lg:py-5 bg-orange rounded-full">
+                    <span className="text-white font-lufga text-lg lg:text-xl font-bold">
+                      See All
+                    </span>
                   </button>
+                </div>
 
-                  <div className="flex flex-col space-y-6">
-                    <div className="flex items-center space-x-8">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-[#FD853A] rounded-full"></div>
-                        <span className="text-[#344054] font-inter text-xl">Salma Chiboub</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-[#FD853A] rounded-full"></div>
-                        <span className="text-[#344054] font-inter text-xl">{dateStr}</span>
-                      </div>
-                    </div>
-                    <h3 className="text-[32px] font-lufga text-[#344054] leading-tight">{post.title}</h3>
-                    <p className="text-muted-foreground font-lufga text-lg leading-relaxed">{truncate(post.content || "", 180)}</p>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-      )}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 lg:gap-10">
+                  {blogs.map((post) => {
+                    const img = (post.images && post.images[0]?.image) || "/project-placeholder.svg";
+                    const dateStr = formatMonthYear(post.created_at);
+                    return (
+                      <article key={post.id} className="flex flex-col space-y-8">
+                        <button
+                          onClick={() => navigate(`/blog/${post.slug}`)}
+                          className="group cursor-pointer focus:outline-none focus:ring-4 focus:ring-orange/30 blog-image-frame overflow-hidden transition-all duration-300"
+                          aria-label={`Read blog post: ${post.title}`}
+                        >
+                          <div className="relative group-hover:shadow-2xl transition-shadow duration-300 blog-image-frame overflow-hidden">
+                            <div className="relative w-full h-[400px] lg:h-[432px] shadow-[0_4px_55px_0_rgba(0,0,0,0.05)] group-hover:shadow-[0_8px_70px_0_rgba(0,0,0,0.15)] transition-shadow duration-300 blog-image-frame overflow-hidden">
+                              <div className="w-full h-full overflow-hidden relative blog-image-mask">
+                                <img
+                                  loading="lazy"
+                                  decoding="async"
+                                  src={addCacheBuster(img)}
+                                  alt={post.title}
+                                  className="absolute inset-0 block w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 rounded-none"
+                                />
+                                <div className="absolute bottom-0 right-0 w-16 h-16 lg:w-20 lg:h-20">
+                                  <div className="w-full h-full blog-corner-cutout"></div>
+                                </div>
+                                <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                              </div>
+                              <div className="absolute bottom-2 right-2 lg:bottom-3 lg:right-3">
+                                <div className="w-16 h-16 lg:w-[72px] lg:h-[72px] bg-[#1D2939] group-hover:bg-[#FD853A] rounded-full flex items-center justify-center -rotate-90 group-hover:rotate-0 transition-all duration-300 shadow-lg group-hover:shadow-xl">
+                                  <ArrowUpRight className="w-7 h-7 lg:w-8 lg:h-8 text-white rotate-90 group-hover:scale-110 transition-transform duration-300" />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+
+                        <div className="flex flex-col space-y-6">
+                          <div className="flex items-center space-x-8">
+                            <div className="flex items-center space-x-2">
+                              <div className="w-2 h-2 bg-[#FD853A] rounded-full"></div>
+                              <span className="text-[#344054] font-inter text-xl">Salma Chiboub</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <div className="w-2 h-2 bg-[#FD853A] rounded-full"></div>
+                              <span className="text-[#344054] font-inter text-xl">{dateStr}</span>
+                            </div>
+                          </div>
+                          <h3 className="text-[32px] font-lufga text-[#344054] leading-tight">{post.title}</h3>
+                          <p className="text-muted-foreground font-lufga text-lg leading-relaxed">{truncate(post.content || "", 180)}</p>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          ) : (
+            <div style={{ minHeight: 420 }} />
+          )
+        ) : (
+          <div style={{ minHeight: 420 }} />
+        )}
+      </div>
 
       {/* Footer */}
-  <footer className="bg-dark rounded-t-3xl relative overflow-hidden" id="contact">
+      {/* Contact/Footer (Section 9) - lazy render */}
+      <div ref={contactRef}>
+        {showContact ? (
+          <footer className="bg-dark rounded-t-3xl relative overflow-hidden" id="contact">
     <div className="absolute inset-0 opacity-30">
       <div className="absolute top-10 right-0 w-96 h-96 bg-orange-light rounded-full blur-3xl transform translate-x-1/2"></div>
       <div className="absolute bottom-10 left-0 w-96 h-96 bg-orange-light rounded-full blur-3xl transform -translate-x-1/2"></div>
@@ -1590,7 +1649,11 @@ export default function Index() {
             </p>
           </div>
         </div>
-      </footer>
+          </footer>
+        ) : (
+          <div style={{ minHeight: 420 }} />
+        )}
+      </div>
     </div>
   );
 }
