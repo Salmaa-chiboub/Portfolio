@@ -22,6 +22,16 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./client"),
       "@shared": path.resolve(__dirname, "./shared"),
     },
+    dedupe: ["react", "react-dom"]
+  },
+  optimizeDeps: {
+    include: [
+      "react",
+      "react-dom",
+      "next-themes",
+      "@radix-ui/react-toast",
+      "sonner"
+    ],
   },
 }));
 

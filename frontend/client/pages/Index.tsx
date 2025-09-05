@@ -1,6 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import ExperiencesSection from "@/components/experiences/ExperiencesSection";
+import { useEffect, useRef, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
+import ProjectsCarousel from "@/components/projects/ProjectsCarousel";
 import { getApiUrl } from "@/lib/config";
+import { cn } from "@/lib/utils";
 import {
   ChevronLeft,
   ChevronRight,
@@ -49,6 +53,56 @@ type AboutItem = {
   updated_at: string;
 };
 
+type ExperienceSkill = {
+  id: number;
+  name: string;
+  icon: string | null;
+};
+
+type ExperienceItem = {
+  id: number;
+  skills: ExperienceSkill[];
+  title: string;
+  company: string;
+  location: string;
+  experience_type: string;
+  start_date: string; // ISO
+  end_date: string | null; // ISO or null
+  description: string;
+  is_current: boolean;
+};
+
+type BlogImage = { id: number; image: string; caption?: string | null };
+
+type BlogPost = {
+  id: number;
+  title: string;
+  slug: string;
+  content: string;
+  created_at: string;
+  images: BlogImage[];
+  links?: { id: number; url: string; text: string }[];
+};
+
+type Paginated<T> = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+};
+
+const BUILD_ID = typeof window !== "undefined" && (import.meta as any).hot ? String(Date.now()) : ((import.meta as any).env?.VITE_BUILD_ID as string) || "1";
+const addCacheBuster = (u: string) => {
+  try {
+    const url = new URL(u, window.location.origin);
+    url.searchParams.set("v", BUILD_ID);
+    return url.toString();
+  } catch {
+    const sep = u.includes("?") ? "&" : "?";
+    return `${u}${sep}v=${BUILD_ID}`;
+  }
+};
+
 export default function Index() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -61,13 +115,139 @@ export default function Index() {
   const [perPage, setPerPage] = useState(12);
   const [skillsGridMinH, setSkillsGridMinH] = useState(0);
 
+  // API availability
+  const [apiReady, setApiReady] = useState<boolean | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(getApiUrl("/api/core/hero/"), { cache: "no-store" });
+        if (!cancelled) setApiReady(!!res.ok);
+      } catch {
+        if (!cancelled) setApiReady(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Experiences state
+  const [experiences, setExperiences] = useState<ExperienceItem[]>([]);
+  const [expLoading, setExpLoading] = useState(false);
+  const [expLoadingMore, setExpLoadingMore] = useState(false);
+  const [expError, setExpError] = useState<string | null>(null);
+  const [expNext, setExpNext] = useState<string | null>(null);
+  const [expTotalCount, setExpTotalCount] = useState<number | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  // Experiences filters/search and expansion state
+  const [expFilter, setExpFilter] = useState<string>("All");
+  const [expQuery, setExpQuery] = useState("");
+  const [expandedExp, setExpandedExp] = useState<Record<number, boolean>>({});
+  const expTypes = useMemo(() => Array.from(new Set((experiences || []).map(e => e.experience_type).filter(Boolean))), [experiences]);
+  const displayedExperiences = useMemo(() => {
+    let list = experiences;
+    if (expFilter !== "All") list = list.filter(e => e.experience_type === expFilter);
+    const q = expQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter(e =>
+        e.title.toLowerCase().includes(q) ||
+        e.company.toLowerCase().includes(q) ||
+        e.description.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [experiences, expFilter, expQuery]);
+
+  const timelineRef = useRef<HTMLDivElement | null>(null);
+  const [timelineProgress, setTimelineProgress] = useState(0);
+
+  const navigate = useNavigate();
   const [contactName, setContactName] = useState("");
+
+  // Lazy load flags for sections
+  const servicesRef = useRef<HTMLDivElement | null>(null);
+  const experiencesRef = useRef<HTMLDivElement | null>(null);
+  const projectsRef = useRef<HTMLDivElement | null>(null);
+  const blogRef = useRef<HTMLDivElement | null>(null);
+  const contactRef = useRef<HTMLDivElement | null>(null);
+
+  const [showServices, setShowServices] = useState(false);
+  const [showExperiences, setShowExperiences] = useState(false);
+  const [showProjects, setShowProjects] = useState(false);
+  const [showBlog, setShowBlog] = useState(false);
+  const [showContact, setShowContact] = useState(false);
+
+  useEffect(() => {
+    const observers: IntersectionObserver[] = [];
+    const createObs = (ref: React.RefObject<Element>, cb: () => void) => {
+      if (!ref.current) return;
+      const io = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            cb();
+            io.disconnect();
+          }
+        }
+      }, { rootMargin: '200px 0px' });
+      io.observe(ref.current);
+      observers.push(io);
+    };
+    try {
+      if (servicesRef.current) createObs(servicesRef, () => setShowServices(true));
+      if (experiencesRef.current) createObs(experiencesRef, () => setShowExperiences(true));
+      if (projectsRef.current) createObs(projectsRef, () => setShowProjects(true));
+      if (blogRef.current) createObs(blogRef, () => setShowBlog(true));
+      if (contactRef.current) createObs(contactRef, () => setShowContact(true));
+    } catch (e) {
+      // ignore
+    }
+    return () => observers.forEach((o) => o.disconnect());
+  }, []);
+
+  // About section lazy-load
+  const aboutRef = useRef<HTMLDivElement | null>(null);
+  const [aboutInView, setAboutInView] = useState(false);
+  useEffect(() => {
+    const el = aboutRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      const [entry] = entries;
+      if (entry.isIntersecting) {
+        setAboutInView(true);
+        io.disconnect();
+      }
+    }, { rootMargin: "200px 0px", threshold: 0.05 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   const [contactEmail, setContactEmail] = useState("");
   const [contactSubject, setContactSubject] = useState("");
   const [contactMessage, setContactMessage] = useState("");
   const [contactLoading, setContactLoading] = useState(false);
   const [contactError, setContactError] = useState<string | null>(null);
   const [contactSuccess, setContactSuccess] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [subjectError, setSubjectError] = useState<string | null>(null);
+  const [messageError, setMessageError] = useState<string | null>(null);
+  const [touched, setTouched] = useState({ name: false, email: false, subject: false, message: false });
+
+  const validateName = (v: string) => (v.trim().length >= 2 ? null : "Name must be at least 2 characters.");
+  const validateEmail = (v: string) => (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()) ? null : "Please enter a valid email.");
+  const validateSubject = (v: string) => (v.trim().length >= 3 ? null : "Subject must be at least 3 characters.");
+  const validateMessage = (v: string) => (v.trim().length >= 10 ? null : "Message must be at least 10 characters.");
+
+  // Auto-dismiss contact alerts after 5s
+  useEffect(() => {
+    if (!contactSuccess && !contactError) return;
+    const t = window.setTimeout(() => {
+      setContactSuccess(null);
+      setContactError(null);
+    }, 5000);
+    return () => window.clearTimeout(t);
+  }, [contactSuccess, contactError]);
 
   const touchStartX = useRef<number | null>(null);
   const touchDeltaX = useRef(0);
@@ -85,9 +265,10 @@ export default function Index() {
   }, []);
 
   useEffect(() => {
-    const url = getApiUrl("/api/core/hero/");
+    if (apiReady !== true) return;
+    const url = "/api/core/hero/";
     if (!url) return;
-    fetch(url)
+    fetch(getApiUrl(url), { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
       .then((data: HeroItem[]) => {
         const active = Array.isArray(data)
@@ -98,22 +279,24 @@ export default function Index() {
       .catch(() => {
         // Silently ignore fetch errors in UI; keep static fallback
       });
-  }, []);
+  }, [apiReady]);
 
   useEffect(() => {
-    const url = getApiUrl("/api/core/about/");
+    if (apiReady !== true) return;
+    const url = "/api/core/about/";
     if (!url) return;
-    fetch(url)
+    fetch(getApiUrl(url), { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
       .then((data: AboutItem) => setAbout(data || null))
       .catch(() => {});
-  }, []);
+  }, [apiReady]);
 
   useEffect(() => {
-    const url = getApiUrl("/api/skills/");
+    if (apiReady !== true) return;
+    const url = "/api/skills/";
     if (!url) return;
     setSkillsLoading(true);
-    fetch(url)
+    fetch(getApiUrl(url), { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
       .then((data: Skill[]) => {
         if (Array.isArray(data)) {
@@ -126,6 +309,104 @@ export default function Index() {
         setSkills([]);
       })
       .finally(() => setSkillsLoading(false));
+  }, [apiReady]);
+
+  // Fetch experiences (initial) + capture pagination
+  useEffect(() => {
+    if (apiReady !== true) return;
+    const url = "/api/experiences/";
+    if (!url) return;
+    setExpLoading(true);
+    setExpError(null);
+    fetch(getApiUrl(url), { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+      .then((data: Paginated<ExperienceItem> | ExperienceItem[]) => {
+        if (Array.isArray(data)) {
+          setExperiences(data);
+          setExpNext(null);
+          setExpTotalCount(Array.isArray(data) ? data.length : 0);
+        } else if (data && Array.isArray((data as Paginated<ExperienceItem>).results)) {
+          const d = data as Paginated<ExperienceItem>;
+          setExperiences(d.results);
+          setExpNext(d.next ?? null);
+          setExpTotalCount(typeof d.count === "number" ? d.count : (d.results?.length ?? 0));
+        } else {
+          setExperiences([]);
+          setExpNext(null);
+        }
+      })
+      .catch(() => {
+        setExpError("Failed to load experiences.");
+        setExperiences([]);
+        setExpNext(null);
+        setExpTotalCount(0);
+      })
+      .finally(() => setExpLoading(false));
+  }, [apiReady]);
+
+  const buildNextUrl = (u: string | null) => {
+    if (!u) return null;
+    try {
+      const parsed = new URL(u);
+      const pathWithQuery = `${parsed.pathname}${parsed.search}`;
+      const rel = getApiUrl(pathWithQuery);
+      return rel || u;
+    } catch {
+      return getApiUrl(u) || u;
+    }
+  };
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (apiReady === true && entry.isIntersecting && expNext && !expLoadingMore) {
+          const nextUrl = buildNextUrl(expNext);
+          if (!nextUrl) return;
+          setExpLoadingMore(true);
+          fetch(getApiUrl(nextUrl), { cache: "no-store" })
+            .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+            .then((data: Paginated<ExperienceItem> | ExperienceItem[]) => {
+              if (Array.isArray(data)) {
+                setExperiences((prev) => [...prev, ...data]);
+                setExpNext(null);
+              } else {
+                const d = data as Paginated<ExperienceItem>;
+                setExperiences((prev) => [...prev, ...(d.results || [])]);
+                setExpNext(d.next ?? null);
+              }
+            })
+            .catch(() => {})
+            .finally(() => setExpLoadingMore(false));
+        }
+      },
+      { rootMargin: "200px 0px" }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [expNext, expLoadingMore]);
+
+  // Timeline fill progress on scroll
+  useEffect(() => {
+    const update = () => {
+      const el = timelineRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const visible = Math.min(rect.height, Math.max(0, window.innerHeight - rect.top));
+      const p = Math.max(0, Math.min(1, visible / (rect.height || 1)));
+      setTimelineProgress(Math.round(p * 100));
+    };
+    update();
+    const onScroll = () => requestAnimationFrame(update);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
   }, []);
 
   useEffect(() => {
@@ -146,7 +427,8 @@ export default function Index() {
       else if (w >= 1024) cols = 5; // lg
       else if (w >= 768) cols = 4; // md
       else if (w >= 640) cols = 3; // sm
-      const rows = w < 768 ? 3 : 2; // more items on mobile/tablet
+      let rows = w < 768 ? 3 : 2; // default
+      if (w >= 1024) rows = 3; // increase rows on desktop
 
       // Compute a consistent minimum height for the grid based on breakpoint styles
       let itemH = 64; // h-16 -> 4rem
@@ -163,7 +445,8 @@ export default function Index() {
       const minH = rows * itemH + (rows - 1) * gap;
       setSkillsGridMinH(minH);
 
-      setPerPage(cols * rows);
+      const computed = cols * rows;
+      setPerPage(w >= 1024 ? Math.min(computed, 15) : computed);
     };
     compute();
     window.addEventListener("resize", compute);
@@ -175,13 +458,42 @@ export default function Index() {
   };
 
   const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
-    if (isDarkMode) {
-      document.documentElement.classList.remove("dark");
-    } else {
-      document.documentElement.classList.add("dark");
-    }
+    setIsDarkMode((v) => !v);
   };
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("theme");
+      let initial = isDarkMode;
+      if (saved === "dark") initial = true;
+      else if (saved === "light") initial = false;
+      else if (window.matchMedia) initial = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      setIsDarkMode(initial);
+      document.documentElement.classList.toggle("dark", initial);
+    } catch {
+      document.documentElement.classList.toggle("dark", isDarkMode);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", isDarkMode);
+    try { localStorage.setItem("theme", isDarkMode ? "dark" : "light"); } catch {}
+  }, [isDarkMode]);
+
+  // Hero typing animation
+  const heroFirst = "I'm ";
+  const heroSecond = "Salma Chiboub";
+  const heroTotal = heroFirst.length + heroSecond.length;
+  const [typedIdx, setTypedIdx] = useState(0);
+  useEffect(() => {
+    let id: number | null = null;
+    const tick = () => setTypedIdx((v) => (v >= heroTotal ? v : v + 1));
+    id = window.setInterval(tick, 80);
+    return () => {
+      if (id) window.clearInterval(id);
+    };
+  }, []);
 
   const aboutTitle = (about?.title && about.title.trim().length > 0)
     ? about.title.trim()
@@ -204,13 +516,18 @@ export default function Index() {
     const subject = contactSubject.trim();
     const message = contactMessage.trim();
 
-    if (!name || !email || !subject || !message) {
-      setContactError("Please fill in all fields.");
-      return;
-    }
-    const emailOk = /.+@.+\..+/.test(email);
-    if (!emailOk) {
-      setContactError("Please enter a valid email.");
+    // client-side validation
+    const nErr = validateName(name);
+    const eErr = validateEmail(email);
+    const sErr = validateSubject(subject);
+    const mErr = validateMessage(message);
+    setTouched({ name: true, email: true, subject: true, message: true });
+    setNameError(nErr);
+    setEmailError(eErr);
+    setSubjectError(sErr);
+    setMessageError(mErr);
+    if (nErr || eErr || sErr || mErr) {
+      setContactError("Please correct the highlighted fields.");
       return;
     }
 
@@ -319,8 +636,47 @@ export default function Index() {
     };
   }, [skillsPage, totalSkillPages]);
 
+  const formatMonthYear = (iso: string | null | undefined) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return new Intl.DateTimeFormat(undefined, { month: "short", year: "numeric" }).format(d);
+  };
+  const truncate = (s: string, max: number) => {
+    const str = s || "";
+    if (str.length <= max) return str;
+    const cut = str.slice(0, max);
+    const lastSpace = cut.lastIndexOf(" ");
+    return (lastSpace > 40 ? cut.slice(0, lastSpace) : cut).trim() + "…";
+  };
+
+  const showExperiences = expLoading || ((expTotalCount ?? experiences.length) > 0);
+
+  // Blogs state
+  const [blogs, setBlogs] = useState<BlogPost[]>([]);
+  const [blogsLoading, setBlogsLoading] = useState(false);
+
+  useEffect(() => {
+    if (apiReady !== true) return;
+    const url = "/api/blog/posts/";
+    if (!url) return;
+    setBlogsLoading(true);
+    fetch(url, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data: BlogPost[]) => {
+        if (Array.isArray(data)) {
+          const sorted = [...data].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          setBlogs(sorted.slice(0, 3));
+        } else {
+          setBlogs([]);
+        }
+      })
+      .catch(() => setBlogs([]))
+      .finally(() => setBlogsLoading(false));
+  }, [apiReady]);
+
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-background text-foreground">
       {/* Navigation - Fixed and Responsive */}
       <nav
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
@@ -346,7 +702,7 @@ export default function Index() {
                 href="#services"
                 className="text-white font-lufga text-base px-4 py-3 hover:text-orange transition-colors rounded-full"
               >
-                Service
+                Stack
               </a>
             </div>
 
@@ -374,7 +730,7 @@ export default function Index() {
                 href="#resume"
                 className="text-white font-lufga text-base px-4 py-3 hover:text-orange transition-colors rounded-full"
               >
-                Resume
+                Experience
               </a>
               <a
                 href="#project"
@@ -409,7 +765,7 @@ export default function Index() {
                 href="#services"
                 className="text-white font-lufga text-sm px-3 py-2 hover:text-orange transition-colors"
               >
-                Service
+                Stack
               </a>
             </div>
 
@@ -435,7 +791,13 @@ export default function Index() {
                 href="#resume"
                 className="text-white font-lufga text-sm px-3 py-2 hover:text-orange transition-colors"
               >
-                Resume
+                Experience
+              </a>
+              <a
+                href="#project"
+                className="text-white font-lufga text-sm px-3 py-2 hover:text-orange transition-colors"
+              >
+                Project
               </a>
               <a
                 href="#contact"
@@ -504,14 +866,14 @@ export default function Index() {
                     className="text-white font-lufga text-sm px-5 py-3 hover:bg-orange/10 hover:text-orange transition-colors border-b border-white/5"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
-                    Service
+                    Stack
                   </a>
                   <a
                     href="#resume"
                     className="text-white font-lufga text-sm px-5 py-3 hover:bg-orange/10 hover:text-orange transition-colors border-b border-white/5"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
-                    Resume
+                    Experience
                   </a>
                   <a
                     href="#project"
@@ -519,6 +881,13 @@ export default function Index() {
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     Project
+                  </a>
+                  <a
+                    href="#about"
+                    className="text-white font-lufga text-sm px-5 py-3 hover:bg-orange/10 hover:text-orange transition-colors border-b border-white/5"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    About
                   </a>
                   <a
                     href="#contact"
@@ -566,19 +935,19 @@ export default function Index() {
 
               {/* Main heading - Responsive text sizes */}
               <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-urbanist font-bold leading-none tracking-tight">
-                <span className="text-dark">I'm </span>
-                <span className="text-orange">Salma Chiboub</span>
+                <span className="text-dark">{typedIdx <= heroFirst.length ? heroFirst.slice(0, typedIdx) : heroFirst}</span>
+                <span className="text-orange">{typedIdx > heroFirst.length ? heroSecond.slice(0, Math.min(typedIdx - heroFirst.length, heroSecond.length)) : ""}</span>
               </h1>
 
               {/* Headline */}
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-lufga font-bold text-dark leading-tight">
-                {hero?.headline || "Product Designer & UX Specialist"}
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-lufga font-bold text-foreground leading-tight break-words whitespace-normal">
+                {hero?.headline || "Software engineering student"}
               </h2>
 
               {/* Subheadline */}
-              <p className="text-gray-text font-lufga text-lg lg:text-xl leading-relaxed max-w-lg mx-auto lg:mx-0">
+              <p className="text-muted-foreground font-lufga text-lg lg:text-xl leading-relaxed max-w-lg mx-auto lg:mx-0">
                 {hero?.subheadline ||
-                  "Creating exceptional digital experiences through innovative design solutions that drive business growth and user satisfaction."}
+                  "Code is like humor. When you have to explain it, it's bad."}
               </p>
 
               {/* Decorative arrow bottom - hidden on mobile */}
@@ -607,10 +976,17 @@ export default function Index() {
 
                 {/* Main image */}
                 <div className="relative z-10">
-                  <img
-                    src={(hero?.image && hero.image.trim() !== "") ? hero.image : "/caracter.png"}
+                  <motion.img
+                    loading="eager"
+                    fetchpriority="high"
+                    decoding="async"
+                    src={(hero?.image && hero.image.trim() !== "") ? addCacheBuster(hero.image) : addCacheBuster("/caracter.png")}
                     alt="Salma Chiboub - Product Designer"
-                    className="w-full max-w-xs sm:max-w-sm lg:max-w-md xl:max-w-lg h-auto object-cover"
+                    className="w-full max-w-xs sm:max-w-sm lg:max-w-md xl:max-w-lg h-auto object-cover rounded-none"
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    viewport={{ once: false, amount: 0.4 }}
+                    transition={{ duration: 0.9, ease: "easeOut" }}
                   />
                 </div>
 
@@ -667,66 +1043,79 @@ export default function Index() {
         </div>
       </section>
 
+      {/* Animated divider between Hero and About */}
+      <div className="py-4 bg-background">
+        <motion.div
+          initial={{ scaleX: 0, opacity: 0 }}
+          whileInView={{ scaleX: 1, opacity: 1 }}
+          viewport={{ once: true, amount: 0.6 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="h-1 bg-orange rounded-full mx-auto"
+          style={{ width: 96, transformOrigin: "center" }}
+        />
+      </div>
+
       {/* About Section */}
-      <section id="about" className="pt-2.5 pb-16 lg:pt-2.5 lg:pb-24 bg-white">
+      <section id="about" className="pt-2.5 pb-16 lg:pt-2.5 lg:pb-24 bg-background" ref={aboutRef}>
         <div className="container mx-auto max-w-7xl px-4">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12 items-start">
-            {/* Left 35% - Motifs + Download */}
-            <div className="lg:col-span-1 flex items-center justify-center">
-              <div className="relative w-full max-w-sm flex flex-col items-center justify-center min-h-[220px]">
-                {(about?.cv || (about?.hiring_email && about.hiring_email.trim() !== "")) && (
-                  <>
-                    <div className="mt-6 flex items-center gap-3">
-                      {about?.cv && (
-                        <a
-                          href={about.cv}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center px-8 py-4 bg-orange rounded-full text-white font-lufga text-lg font-medium hover:bg-orange/90 transition-colors shadow-lg"
-                        >
-                          Download CV
-                        </a>
-                      )}
-                      {about?.hiring_email && about.hiring_email.trim() !== "" && (
-                        <a
-                          href={`mailto:${about.hiring_email}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const email = about?.hiring_email?.trim();
-                            if (!email) {
-                              e.preventDefault();
-                              return;
-                            }
-                            window.location.href = `mailto:${email}`;
-                          }}
-                          className="inline-flex items-center px-8 py-4 bg-white border border-gray-text rounded-full text-gray-text font-lufga text-lg font-medium hover:bg-gray-text hover:text-white transition-colors shadow"
-                        >
-                          Hire Me
-                        </a>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12 items-center">
+            {aboutInView && (
+              <>
+                {/* Left 35% - Motifs + Download */}
+                <div className="lg:col-span-1 flex items-center justify-center">
+                  <div className="relative w-full max-w-sm flex flex-col items-center justify-center min-h-[360px]">
+                    {(about?.cv || (about?.hiring_email && about.hiring_email.trim() !== "")) && (
+                      <>
+                        <div className="mt-6 flex items-center gap-3">
+                          {about?.cv && (
+                            <a
+                              href={about.cv}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center px-10 py-5 bg-orange rounded-full text-white font-lufga text-xl font-medium hover:bg-orange/90 transition-colors shadow-lg"
+                            >
+                              Download CV
+                            </a>
+                          )}
+                          {about?.hiring_email && about.hiring_email.trim() !== "" && (
+                            <a
+                              href={`mailto:${about.hiring_email}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const email = about?.hiring_email?.trim();
+                                if (!email) {
+                                  e.preventDefault();
+                                  return;
+                                }
+                                window.location.href = `mailto:${email}`;
+                              }}
+                              className="inline-flex items-center px-10 py-5 bg-white border border-gray-text rounded-full text-muted-foreground font-lufga text-xl font-medium hover:bg-gray-text hover:text-white transition-colors shadow"
+                            >
+                              Get in touch
+                            </a>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
 
-            {/* Right 65% - About content */}
-            <div className="lg:col-span-2 space-y-8 lg:space-y-10 text-center lg:text-left">
-              <div className="space-y-4">
-                <h2 className="text-4xl sm:text-5xl lg:text-6xl font-lufga font-bold">
-                  {aboutFirst && <span className="text-dark">{aboutFirst} </span>}
-                  <span className="text-orange">{aboutLast}</span>
-                </h2>
-                <div className="w-20 h-1 bg-orange mx-auto lg:mx-0 rounded-full"></div>
-              </div>
+                {/* Right 65% - About content */}
+                <div className="lg:col-span-2 space-y-8 lg:space-y-10 text-center lg:text-left">
+                  <div className="space-y-4">
+                    <h2 className="text-4xl sm:text-5xl lg:text-6xl font-lufga font-bold">
+                      {aboutFirst && <span className="text-dark">{aboutFirst} </span>}
+                      <span className="text-orange">{aboutLast}</span>
+                    </h2>
+                    <div className="w-20 h-1 bg-orange mx-auto lg:mx-0 rounded-full"></div>
+                  </div>
 
-              <div className="space-y-6">
-                <p className="text-gray-text font-lufga text-lg lg:text-xl leading-relaxed">
-                  {about?.description ||
-                    "I'm Salma Chiboub, a passionate Product Designer with over 8 years of experience creating digital experiences that make a difference. I specialize in transforming complex problems into simple, elegant solutions that users love."}
-                </p>
-              </div>
-            </div>
+                  <div className="space-y-6">
+                    <div className="text-muted-foreground font-lufga text-lg lg:text-xl leading-relaxed" dangerouslySetInnerHTML={{ __html: about?.description || "I'm a software engineering student passionate about building reliable, user-centric applications. I turn complex problems into simple, maintainable solutions using modern web technologies. 'Programs must be written for people to read, and only incidentally for machines to execute.' — Harold Abelson." }} />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -735,7 +1124,7 @@ export default function Index() {
       {(skillsLoading || skills.length > 0) && (
       <section
         id="services"
-        className="py-16 lg:py-24 bg-dark rounded-t-[50px] relative overflow-hidden"
+        className="py-16 lg:py-24 bg-dark rounded-t-[50px] relative z-0 overflow-hidden"
       >
         {/* Background decorative elements */}
         <div className="absolute inset-0 opacity-30">
@@ -747,10 +1136,16 @@ export default function Index() {
         <div className="container mx-auto max-w-7xl px-4 relative z-10">
           {/* Section header - Responsive */}
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-16 lg:mb-24 space-y-6 lg:space-y-0">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-lufga font-medium">
+            <motion.h2
+              initial={{ opacity: 0, y: 14 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.5 }}
+              transition={{ duration: 0.7, ease: "easeOut" }}
+              className="text-3xl sm:text-4xl lg:text-5xl font-lufga font-medium"
+            >
               <span className="text-white">Tech </span>
               <span className="text-orange">Stack</span>
-            </h2>
+            </motion.h2>
           </div>
 
           {/* Skills grid - Responsive with animation */}
@@ -798,9 +1193,11 @@ export default function Index() {
                   <div key={item.id} className="relative group">
                     <div className="relative bg-gray-400/20 backdrop-blur-lg border border-white/20 rounded-3xl p-1 sm:p-1.5 md:p-2 h-16 sm:h-20 md:h-24 lg:h-28 flex flex-col items-center justify-center text-center">
                       <img
+                        loading="lazy"
+                        decoding="async"
                         src={item.reference.icon}
                         alt={item.reference.name}
-                        className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 object-contain mb-1 sm:mb-2"
+                        className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 object-contain mb-1 sm:mb-2 transition-opacity duration-700"
                       />
                       <h3 className="text-white font-lufga text-xs sm:text-sm md:text-base font-medium truncate w-full">
                         {item.reference.name}
@@ -847,223 +1244,16 @@ export default function Index() {
       </section>
       )}
 
-      {/* Work Experience Section */}
-      <section className="py-16 lg:py-24 bg-white">
-        <div className="container mx-auto max-w-7xl px-4">
-          {/* Section title */}
-          <div className="text-center mb-16 lg:mb-20">
-            <h2 className="text-4xl sm:text-5xl lg:text-6xl font-lufga font-medium">
-              <span className="text-gray-text">My </span>
-              <span className="text-orange">Work Experience</span>
-            </h2>
-          </div>
+      {/* Experiences Section */}
+  <div ref={experiencesRef}>
+    {showExperiences ? <ExperiencesSection /> : <div style={{minHeight: 420}} />}
+  </div>
 
-          {/* Experience timeline - Responsive */}
-          <div className="flex flex-col lg:flex-row justify-between items-start max-w-6xl mx-auto gap-8 lg:gap-0">
-            {/* Left side - Company details */}
-            <div className="space-y-16 lg:space-y-24 flex-1">
-              <div>
-                <h3 className="text-2xl lg:text-4xl font-lufga font-bold text-gray-text mb-3">
-                  Cognizant, Mumbai
-                </h3>
-                <p className="text-xl lg:text-2xl font-lufga text-gray-light">
-                  Sep 2016- July 2020
-                </p>
-              </div>
-              <div>
-                <h3 className="text-2xl lg:text-4xl font-lufga font-bold text-gray-text mb-3">
-                  Sugee Pvt limited, Mumbai
-                </h3>
-                <p className="text-xl lg:text-2xl font-lufga text-gray-light">
-                  Sep 2020- July 2023
-                </p>
-              </div>
-              <div>
-                <h3 className="text-2xl lg:text-4xl font-lufga font-bold text-gray-text mb-3">
-                  Cinetstox, Mumbai
-                </h3>
-                <p className="text-xl lg:text-2xl font-lufga text-gray-light">
-                  Sep 2023
-                </p>
-              </div>
-            </div>
 
-            {/* Timeline - Hidden on mobile, visible on larger screens */}
-            <div className="hidden lg:flex flex-col items-center space-y-20 mx-16">
-              <div className="w-3 h-96 bg-gray-text relative">
-                <div className="absolute -left-6 top-0 w-12 h-12 border-2 border-dashed border-dark-light rounded-full bg-white flex items-center justify-center">
-                  <div className="w-9 h-9 bg-orange rounded-full"></div>
-                </div>
-                <div className="absolute -left-6 top-1/2 transform -translate-y-1/2 w-12 h-12 border-2 border-dashed border-dark-light rounded-full bg-white flex items-center justify-center">
-                  <div className="w-9 h-9 bg-dark-light rounded-full"></div>
-                </div>
-                <div className="absolute -left-6 bottom-0 w-12 h-12 border-2 border-dashed border-dark-light rounded-full bg-white flex items-center justify-center">
-                  <div className="w-9 h-9 bg-orange rounded-full"></div>
-                </div>
-              </div>
-            </div>
-
-            {/* Right side - Role details */}
-            <div className="space-y-8 lg:space-y-12 flex-1">
-              <div>
-                <h3 className="text-2xl lg:text-4xl font-lufga font-bold text-gray-text mb-3">
-                  Experience Designer
-                </h3>
-                <p className="text-lg lg:text-xl font-lufga text-gray-light leading-relaxed max-w-md">
-                  Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis
-                  lacus nunc, posuere in justo vulputate, bibendum sodales
-                </p>
-              </div>
-              <div>
-                <h3 className="text-2xl lg:text-4xl font-lufga font-bold text-gray-text mb-3">
-                  UI/UX Designer
-                </h3>
-                <p className="text-lg lg:text-xl font-lufga text-gray-light leading-relaxed max-w-md">
-                  Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis
-                  lacus nunc, posuere in justo vulputate, bibendum sodales
-                </p>
-              </div>
-              <div>
-                <h3 className="text-2xl lg:text-4xl font-lufga font-bold text-gray-text">
-                  Lead UX Designer
-                </h3>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Why Hire Me Section */}
-      <section className="py-16 lg:py-24 bg-gray-bg rounded-[50px]">
-        <div className="container mx-auto max-w-7xl px-4">
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-12">
-            {/* Left side - Image */}
-            <div className="flex-1 order-2 lg:order-1">
-              <img
-                src="https://api.builder.io/api/v1/image/assets/TEMP/73c843c911c056a8d340e226d62e054705856d24?width=1905"
-                alt="Why hire me"
-                className="w-full max-w-lg h-auto rounded-3xl mx-auto"
-              />
-            </div>
-
-            {/* Right side - Content */}
-            <div className="flex-1 space-y-8 lg:space-y-12 order-1 lg:order-2 text-center lg:text-left">
-              <h2 className="text-4xl sm:text-5xl lg:text-6xl font-lufga font-bold leading-none">
-                <span className="text-gray-text">Why </span>
-                <span className="text-orange">Hire me</span>
-                <span className="text-gray-text">?</span>
-              </h2>
-
-              <p className="text-lg lg:text-xl font-lufga text-gray-light leading-relaxed max-w-md mx-auto lg:mx-0">
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis
-                lacus nunc, posuere in justo vulputate, bibendum sodales
-              </p>
-
-              {/* Stats */}
-              <div className="flex flex-col sm:flex-row justify-center lg:justify-start space-y-8 sm:space-y-0 sm:space-x-16">
-                <div className="text-center lg:text-left">
-                  <div className="text-3xl lg:text-4xl font-lufga font-medium text-dark-light">
-                    450+
-                  </div>
-                  <div className="text-lg lg:text-xl font-lufga text-gray-lighter">
-                    Project Completed
-                  </div>
-                </div>
-                <div className="text-center lg:text-left">
-                  <div className="text-3xl lg:text-4xl font-lufga font-medium text-dark-light">
-                    450+
-                  </div>
-                  <div className="text-lg lg:text-xl font-lufga text-gray-lighter">
-                    Project Completed
-                  </div>
-                </div>
-              </div>
-
-              {/* CTA Button */}
-              <div className="flex justify-center lg:justify-start">
-                <a
-                  href={`mailto:${hireEmail}`}
-                  className="inline-flex items-center px-10 lg:px-14 py-6 lg:py-8 bg-transparent border border-dark rounded-3xl hover:bg-dark hover:text-white transition-colors"
-                >
-                  <span className="text-dark font-lufga text-2xl lg:text-3xl font-bold">
-                    Hire me
-                  </span>
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Portfolio Section */}
-      <section className="py-16 lg:py-24 bg-white">
-        <div className="container mx-auto max-w-7xl px-4">
-          {/* Section header */}
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-12 space-y-6 lg:space-y-0">
-            <h2 className="text-4xl sm:text-5xl lg:text-6xl font-lufga font-bold leading-tight max-w-2xl">
-              <span className="text-gray-text">Lets have a look at my </span>
-              <span className="text-orange">Portfolio</span>
-            </h2>
-            <button className="flex items-center px-8 lg:px-10 py-4 lg:py-5 bg-orange rounded-full">
-              <span className="text-white font-lufga text-lg lg:text-xl font-bold">
-                See All
-              </span>
-            </button>
-          </div>
-
-          {/* Portfolio grid */}
-          <div className="space-y-12">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="aspect-[16/9] bg-gradient-to-br from-orange/20 to-orange/60 rounded-2xl"></div>
-              <div className="aspect-[16/9] bg-gradient-to-br from-orange/20 to-orange/60 rounded-2xl"></div>
-            </div>
-
-            {/* Pagination dots */}
-            <div className="flex justify-center space-x-3">
-              <div className="w-15 h-4 bg-orange rounded-full"></div>
-              <div className="w-4 h-4 bg-gray-border rounded-full"></div>
-              <div className="w-4 h-4 bg-gray-border rounded-full"></div>
-              <div className="w-4 h-4 bg-gray-border rounded-full"></div>
-            </div>
-
-            {/* Tags */}
-            <div className="flex justify-center space-x-2 lg:space-x-4 flex-wrap gap-2">
-              {[
-                "Landing Page",
-                "Product Design",
-                "Animation",
-                "Glassmorphism",
-                "Cards",
-              ].map((tag) => (
-                <span
-                  key={tag}
-                  className="px-4 lg:px-8 py-3 lg:py-4 bg-gray-bg rounded-3xl text-lg lg:text-xl font-inter text-gray-text"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-
-            {/* Project details */}
-            <div className="text-center space-y-6">
-              <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4">
-                <h3 className="text-3xl sm:text-4xl lg:text-5xl font-lufga font-bold text-gray-text">
-                  Lirante - Food Delivery Solution
-                </h3>
-                <div className="w-12 h-12 lg:w-14 lg:h-14 bg-orange rounded-full flex items-center justify-center -rotate-90">
-                  <ArrowUpRight className="w-6 h-6 lg:w-8 lg:h-8 text-white rotate-90" />
-                </div>
-              </div>
-              <p className="text-lg lg:text-xl font-lufga text-gray-text leading-relaxed max-w-3xl mx-auto">
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed
-                congue interdum ligula a dignissim. Lorem ipsum dolor sit amet,
-                consectetur adipiscing elit. Sed lobortis orci elementum egestas
-                lobortis.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
+  {/* Projects Section */}
+  <div ref={projectsRef}>
+    {showProjects ? <ProjectsCarousel /> : <div style={{minHeight: 420}} />}
+  </div>
 
       {/* Testimonials Section */}
       <section className="py-16 lg:py-24 bg-dark rounded-[50px] relative overflow-hidden">
@@ -1074,180 +1264,84 @@ export default function Index() {
         </div>
 
         <div className="container mx-auto max-w-7xl px-4 relative z-10">
-          {/* Section header */}
-          <div className="text-center mb-16 space-y-4">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-lufga font-medium">
-              <span className="text-white">Testimonials That Speak to </span>
-              <span className="text-orange">My Results</span>
-            </h2>
-            <p className="text-lg lg:text-xl font-lufga text-white/90 leading-relaxed max-w-3xl mx-auto">
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed
-              congue interdum ligula a dignissim. Lorem ipsum dolor sit amet,
-              consectetur adipiscing elit. Sed lobortis orci elementum egestas
-              lobortis.
-            </p>
-
-            {/* Decorative elements */}
-            <div className="flex justify-center space-x-8 mt-8">
-              <svg
-                className="w-6 h-6 lg:w-7 lg:h-7 text-white"
-                viewBox="0 0 32 33"
-                fill="none"
+          <div className="text-center py-10 lg:py-16 space-y-8">
+            <motion.h2
+              initial={{ opacity: 0, y: 14 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.5 }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+              className="text-2xl sm:text-4xl lg:text-5xl font-lufga font-bold"
+            >
+              <span className="text-white">Have an Awesome Project Idea? </span>
+              <span className="text-orange">Let's Discuss</span>
+            </motion.h2>
+            <div className="mt-8">
+              <a
+                href="#contact"
+                className="inline-flex items-center gap-3 sm:gap-4 px-8 py-5 sm:px-12 sm:py-6 lg:px-14 lg:py-7 bg-orange rounded-full text-white font-lufga text-xl sm:text-2xl lg:text-3xl font-bold hover:bg-orange/90 transition-colors shadow-lg"
               >
-                <path
-                  d="M2 20.0811C2 17.0811 5 11.0811 2 2.08105M9.5 23.5811C13.8333 19.4144 22.7 9.28105 23.5 2.08105M12.5 30.5811C15.1667 30.5811 22.3 29.1811 29.5 23.5811"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <svg
-                className="w-5 h-5 lg:w-6 lg:h-6 text-white"
-                viewBox="0 0 26 26"
-                fill="none"
-              >
-                <path
-                  d="M11.9808 2.12271L10.4215 4.20376L7.04297 3.42336C5.22377 2.96814 3.01473 2.64297 2.10512 2.64297C-0.298833 2.64297 0.090997 5.17924 2.81981 7.84558L5.09382 10.0567L2.42998 12.788C0.740714 14.4789 -0.16889 15.9746 0.0260252 16.69C0.220941 17.7956 0.805686 17.9256 5.80851 17.7305L11.2661 17.5354L12.5006 19.6165C17.1136 27.4854 21.2068 27.5504 19.1277 19.6815L18.2181 16.2998L19.9074 15.9096C24.9102 14.8041 25.5599 14.5439 25.5599 13.6335C25.5599 13.1132 23.6757 11.7475 21.4017 10.642C16.5938 8.23577 16.139 7.71551 16.139 4.46389C16.139 -0.413553 14.6447 -1.25898 11.9808 2.12271ZM7.69269 7.19525C7.69269 7.52041 7.56275 7.84558 7.4328 7.84558C7.23789 7.84558 6.91303 7.52041 6.71812 7.19525C6.5232 6.80506 6.65314 6.54493 6.978 6.54493C7.36783 6.54493 7.69269 6.80506 7.69269 7.19525ZM12.7605 9.27629C13.2153 9.73152 13.5401 11.0972 13.5401 12.3328V14.674L11.4611 12.593C9.70682 10.8371 9.57687 10.3818 10.2916 9.53642C11.2661 8.3008 11.7209 8.23577 12.7605 9.27629ZM8.21247 14.2188C8.34241 14.674 7.75766 14.9992 6.71812 14.9992C5.15879 14.9992 5.02885 14.8691 5.74354 14.0237C6.65314 12.9181 7.75766 12.9831 8.21247 14.2188Z"
-                  fill="currentColor"
-                />
-              </svg>
+                <Send className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8" />
+                Let’s Contact
+              </a>
             </div>
-          </div>
-
-          {/* Testimonials - Responsive */}
-          <div className="flex flex-col lg:flex-row justify-center space-y-6 lg:space-y-0 lg:space-x-6 overflow-hidden">
-            {[1, 2, 3].map((_, index) => (
-              <div
-                key={index}
-                className={`bg-white/10 backdrop-blur-lg rounded-3xl p-4 lg:p-6 w-full max-w-2xl space-y-4 ${index > 0 ? "hidden lg:block" : ""}`}
-              >
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 lg:w-14 lg:h-14 bg-gray-400 rounded-full overflow-hidden">
-                    <img
-                      src="https://api.builder.io/api/v1/image/assets/TEMP/73c843c911c056a8d340e226d62e054705856d24?width=100"
-                      alt="Jayesh Patil"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div>
-                    <h4 className="text-white font-urbanist text-xl lg:text-2xl font-bold">
-                      Jayesh Patil
-                    </h4>
-                    <p className="text-white font-urbanist text-base lg:text-lg">
-                      CEO, Lirante
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <div className="flex space-x-1">
-                    {[...Array(5)].map((_, i) => (
-                      <Star
-                        key={i}
-                        className="w-6 h-6 lg:w-8 lg:h-8 fill-orange text-orange"
-                      />
-                    ))}
-                  </div>
-                  <span className="text-white font-lufga text-xl lg:text-2xl font-medium">
-                    5.0
-                  </span>
-                </div>
-
-                <p className="text-white font-lufga text-lg lg:text-xl leading-relaxed">
-                  consectetur adipiscing elit. Sed congue interdum ligula a
-                  dignissim. Lorem ipsum dolor sit amet, consectetur adipiscing
-                  elit. Sed lobortis orci elementum egestas lobortis.Sed
-                  lobortis orci elementum egestas lobortis.Sed lobortis orci
-                  elementum egestas lobortis.
-                </p>
-
-                <Quote className="w-24 h-24 lg:w-32 lg:h-32 text-gray-lighter/30 ml-auto" />
-              </div>
-            ))}
           </div>
         </div>
       </section>
 
       {/* Contact Section */}
-      <section className="py-16 lg:py-24 bg-white">
-        <div className="container mx-auto max-w-4xl px-4 text-center space-y-12">
-          <h2 className="text-4xl sm:text-5xl lg:text-6xl font-lufga font-bold leading-tight">
-            <span className="text-gray-text">
-              Have an Awesome Project Idea?{" "}
-            </span>
-            <span className="text-orange">Let's Discuss</span>
-          </h2>
-
-          {/* Email form - Responsive */}
-          <div className="flex items-center justify-center max-w-3xl mx-auto">
-            <div className="flex flex-col sm:flex-row items-center w-full border border-gray-border rounded-full p-2 lg:p-4 backdrop-blur-lg space-y-4 sm:space-y-0">
-              <div className="flex items-center flex-1 space-x-4 px-4">
-                <div className="w-12 h-12 lg:w-16 lg:h-16 bg-orange-lighter rounded-full flex items-center justify-center">
-                  <Send className="w-6 h-6 lg:w-8 lg:h-8 text-orange" />
-                </div>
-                <span className="text-gray-text font-urbanist text-lg lg:text-xl">
-                  Enter Email Address
-                </span>
-              </div>
-              <button className="flex items-center px-8 lg:px-10 py-4 lg:py-5 bg-orange rounded-full">
-                <span className="text-white font-urbanist text-lg lg:text-xl font-medium">
-                  Send
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Stats - Responsive */}
-          <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-8 lg:space-x-16">
-            <div className="flex items-center justify-center space-x-3">
-              <Star className="w-5 h-5 lg:w-6 lg:h-6 text-gray-text" />
-              <span className="text-gray-text font-lufga text-sm lg:text-base">
-                4.9/5 Average Ratings
-              </span>
-            </div>
-            <div className="flex items-center justify-center space-x-3">
-              <div className="w-5 h-5 lg:w-6 lg:h-6 bg-gray-text rounded"></div>
-              <span className="text-gray-text font-lufga text-sm lg:text-base">
-                25+ Winning Awards
-              </span>
-            </div>
-            <div className="flex items-center justify-center space-x-3">
-              <div className="w-5 h-5 lg:w-6 lg:h-6 bg-gray-text rounded"></div>
-              <span className="text-gray-text font-lufga text-sm lg:text-base">
-                Certified Product Designer
-              </span>
-            </div>
-          </div>
-        </div>
-      </section>
+  <section ref={contactRef} className="py-16 lg:py-24 bg-dark rounded-t-[50px] relative overflow-hidden">
+    <div className="absolute inset-0 opacity-30">
+      <div className="absolute top-20 right-0 w-96 h-96 bg-orange-light rounded-full blur-3xl transform translate-x-1/2"></div>
+      <div className="absolute bottom-20 left-0 w-96 h-96 bg-orange-light rounded-full blur-3xl transform -translate-x-1/2"></div>
+    </div>
+    <div className="container mx-auto max-w-4xl px-4 text-center space-y-12 relative z-10">
+      {showContact ? (
+        <></>
+      ) : (
+        <div style={{minHeight: 200}} />
+      )}
+    </div>
+  </section>
 
       {/* Skills Marquee */}
       <div className="bg-orange rounded-t-3xl h-32 lg:h-36 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-12 lg:h-16 bg-white transform -rotate-2 flex items-center justify-center">
           <div className="flex items-center space-x-6 lg:space-x-8 text-black font-lufga text-3xl lg:text-5xl animate-pulse">
-            <span>UX Design</span>
+            <span>Software Engineering</span>
             <Star className="w-6 h-6 lg:w-8 lg:h-8 fill-orange text-orange" />
-            <span>App Design</span>
+            <span>Web Development</span>
             <Star className="w-6 h-6 lg:w-8 lg:h-8 fill-orange text-orange" />
-            <span>Dashboard</span>
+            <span>APIs</span>
             <Star className="w-6 h-6 lg:w-8 lg:h-8 fill-orange text-orange" />
-            <span>Wireframe</span>
+            <span>DevOps</span>
             <Star className="w-6 h-6 lg:w-8 lg:h-8 fill-orange text-orange" />
-            <span>User Research</span>
+            <span>Cloud</span>
           </div>
         </div>
       </div>
 
+      {/* Divider between Stack and Blog */}
+      <div className="py-4 bg-background">
+        <motion.div
+          initial={{ scaleX: 0, opacity: 0 }}
+          whileInView={{ scaleX: 1, opacity: 1 }}
+          viewport={{ once: true, amount: 0.6 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="h-1 bg-orange rounded-full mx-auto"
+          style={{ width: 96, transformOrigin: "center" }}
+        />
+      </div>
+
       {/* Blog Section */}
-      <section className="py-16 lg:py-24 bg-white">
+      {(!blogsLoading && blogs.length > 0) && (
+      <section id="blog" className="py-16 lg:py-24 bg-background">
         <div className="container mx-auto max-w-7xl px-4">
           {/* Section header */}
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-12 space-y-6 lg:space-y-0">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-lufga font-bold text-gray-text">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-lufga font-bold text-muted-foreground">
               From my blog post
             </h2>
-            <button className="flex items-center px-8 lg:px-10 py-4 lg:py-5 bg-orange rounded-full">
+            <button onClick={() => navigate("/blog")} className="flex items-center px-8 lg:px-10 py-4 lg:py-5 bg-orange rounded-full">
               <span className="text-white font-lufga text-lg lg:text-xl font-bold">
                 See All
               </span>
@@ -1255,174 +1349,236 @@ export default function Index() {
           </div>
 
           {/* Blog posts - Responsive grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
-            {[
-              {
-                category: "UI/UX Design",
-                author: "Salma Chiboub",
-                date: "10 Nov, 2023",
-                title: "Design Unraveled: Behind the Scenes of UI/UX Magic",
-                image:
-                  "https://api.builder.io/api/v1/image/assets/TEMP/713973bb10f462b27d845512dfe86444aed090ba?width=832",
-              },
-              {
-                category: "App Design",
-                author: "Salma Chiboub",
-                date: "09 Oct, 2023",
-                title: "Sugee: Loan Management System for Rural Sector.",
-                image:
-                  "https://api.builder.io/api/v1/image/assets/TEMP/e70658da6b94c97e4da4ce7b0cd18d04f7b7e231?width=832",
-              },
-              {
-                category: "App Design",
-                author: "Salma Chiboub",
-                date: "13 Aug, 2023",
-                title: "Cinetrade: Innovative way to invest in Digital Media",
-                image:
-                  "https://api.builder.io/api/v1/image/assets/TEMP/713973bb10f462b27d845512dfe86444aed090ba?width=832",
-              },
-            ].map((post, index) => (
-              <article key={index} className="space-y-6">
-                <div className="relative group">
-                  <div className="aspect-[4/3] bg-gray-200 rounded-2xl overflow-hidden shadow-lg">
-                    <img
-                      src={post.image}
-                      alt={post.title}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="absolute bottom-4 right-4">
-                    <div className="w-20 h-20 lg:w-28 lg:h-28 bg-dark-light rounded-full flex items-center justify-center -rotate-90 group-hover:rotate-0 transition-transform duration-300">
-                      <ArrowUpRight className="w-12 h-12 lg:w-16 lg:h-16 text-white rotate-90" />
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 lg:gap-10">
+            {blogs.map((post) => {
+              const img = (post.images && post.images[0]?.image) || "/project-placeholder.svg";
+              const dateStr = formatMonthYear(post.created_at);
+              return (
+                <article key={post.id} className="flex flex-col space-y-8">
+                  <button
+                    onClick={() => navigate(`/blog/${post.slug}`)}
+                    className="group cursor-pointer focus:outline-none focus:ring-4 focus:ring-orange/30 blog-image-frame overflow-hidden transition-all duration-300"
+                    aria-label={`Read blog post: ${post.title}`}
+                  >
+                    <div className="relative group-hover:shadow-2xl transition-shadow duration-300 blog-image-frame overflow-hidden">
+                      <div className="relative w-full h-[400px] lg:h-[432px] shadow-[0_4px_55px_0_rgba(0,0,0,0.05)] group-hover:shadow-[0_8px_70px_0_rgba(0,0,0,0.15)] transition-shadow duration-300 blog-image-frame overflow-hidden">
+                        <div className="w-full h-full overflow-hidden relative blog-image-mask">
+                          <img
+                            loading="lazy"
+                            decoding="async"
+                            src={addCacheBuster(img)}
+                            alt={post.title}
+                            className="absolute inset-0 block w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 rounded-none"
+                          />
+                          <div className="absolute bottom-0 right-0 w-16 h-16 lg:w-20 lg:h-20">
+                            <div className="w-full h-full blog-corner-cutout"></div>
+                          </div>
+                          <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                        </div>
+                        <div className="absolute bottom-2 right-2 lg:bottom-3 lg:right-3">
+                          <div className="w-16 h-16 lg:w-[72px] lg:h-[72px] bg-[#1D2939] group-hover:bg-[#FD853A] rounded-full flex items-center justify-center -rotate-90 group-hover:rotate-0 transition-all duration-300 shadow-lg group-hover:shadow-xl">
+                            <ArrowUpRight className="w-7 h-7 lg:w-8 lg:h-8 text-white rotate-90 group-hover:scale-110 transition-transform duration-300" />
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  </button>
 
-                <div className="space-y-4">
-                  <span className="inline-block px-6 lg:px-8 py-3 lg:py-4 bg-gray-bg rounded-3xl text-lg lg:text-xl font-inter text-gray-text">
-                    {post.category}
-                  </span>
-
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-8">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-orange rounded-full"></div>
-                      <span className="text-gray-text font-inter text-lg lg:text-xl">
-                        {post.author}
-                      </span>
+                  <div className="flex flex-col space-y-6">
+                    <div className="flex items-center space-x-8">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-2 h-2 bg-[#FD853A] rounded-full"></div>
+                        <span className="text-[#344054] font-inter text-xl">Salma Chiboub</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-2 h-2 bg-[#FD853A] rounded-full"></div>
+                        <span className="text-[#344054] font-inter text-xl">{dateStr}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-orange rounded-full"></div>
-                      <span className="text-gray-text font-inter text-lg lg:text-xl">
-                        {post.date}
-                      </span>
-                    </div>
+                    <h3 className="text-[32px] font-lufga text-[#344054] leading-tight">{post.title}</h3>
+                    <p className="text-muted-foreground font-lufga text-lg leading-relaxed">{truncate(post.content || "", 180)}</p>
                   </div>
-
-                  <h3 className="text-2xl lg:text-3xl font-lufga text-gray-text leading-tight">
-                    {post.title}
-                  </h3>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         </div>
       </section>
+      )}
 
       {/* Footer */}
-      <footer className="bg-dark-lighter rounded-t-3xl" id="contact">
-        <div className="container mx-auto max-w-7xl px-4 py-16 lg:py-24">
+  <footer className="bg-dark rounded-t-3xl relative overflow-hidden" id="contact">
+    <div className="absolute inset-0 opacity-30">
+      <div className="absolute top-10 right-0 w-96 h-96 bg-orange-light rounded-full blur-3xl transform translate-x-1/2"></div>
+      <div className="absolute bottom-10 left-0 w-96 h-96 bg-orange-light rounded-full blur-3xl transform -translate-x-1/2"></div>
+    </div>
+    <div className="container mx-auto max-w-7xl px-4 py-10 lg:py-16 relative z-10">
           {/* Header */}
-          <div className="mb-10 lg:mb-14 text-center">
-            <h2 className="text-4xl sm:text-5xl lg:text-6xl font-lufga font-bold text-white leading-tight">
-              Contact Me
+          <div className="mb-6 lg:mb-8 text-center flex flex-col justify-center items-center">
+            <h2 className="text-4xl sm:text-5xl lg:text-6xl font-lufga font-bold leading-tight">
+              <span className="text-white">Contact </span>
+              <span className="text-orange">Me</span>
             </h2>
+            <div className="w-20 h-1 bg-orange mx-auto lg:mx-0 rounded-full mt-3" />
             <p className="text-white/80 font-lufga text-lg lg:text-xl mt-4">
-              I’d love to hear from you. Fill out the form and I’ll get back to you soon.
+              Have a project in mind? Send me a message or reach me directly:
             </p>
           </div>
 
-          {/* Contact form */}
-          <div className="max-w-3xl mx-auto bg-white/10 backdrop-blur-lg border border-white/10 rounded-3xl p-6 lg:p-8 mb-12">
-            <form onSubmit={handleContactSubmit} className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex flex-col gap-2">
-                  <label className="text-white font-lufga text-sm">Name</label>
+          {/* Contact layout: left info + right form, no inner card */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12 mb-10">
+            {/* Left column: info and vertical nav */}
+            <div className="space-y-6">
+              <ul className="space-y-2">
+                <li className="text-white/80 font-lufga"><span className="text-white font-bold">Email:</span> {hireEmail}</li>
+              </ul>
+              <nav className="pt-2 hidden lg:block">
+                <ul className="space-y-2">
+                  <li><a href="#about" className="text-white font-lufga hover:text-orange transition-colors">About</a></li>
+                  <li><a href="#services" className="text-white font-lufga hover:text-orange transition-colors">Service</a></li>
+                  <li><a href="#resume" className="text-white font-lufga hover:text-orange transition-colors">Resume</a></li>
+                  <li><a href="#project" className="text-white font-lufga hover:text-orange transition-colors">Project</a></li>
+                  <li><a href="#contact" className="text-white font-lufga hover:text-orange transition-colors">Contact</a></li>
+                </ul>
+              </nav>
+            </div>
+
+            {/* Right column: compact form */}
+            <div className="lg:col-span-2 lg:pl-12">
+              <form onSubmit={handleContactSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-white font-lufga text-sm">Name</label>
+                    <input
+                      value={contactName}
+                      onChange={(e) => {
+                        setContactName(e.target.value);
+                        const err = validateName(e.target.value);
+                        setNameError(err);
+                      }}
+                      onBlur={() => setTouched((t) => ({ ...t, name: true }))}
+                      type="text"
+                      name="name"
+                      autoComplete="name"
+                      aria-invalid={touched.name && !!nameError}
+                      aria-describedby={touched.name && nameError ? "name-error" : undefined}
+                      className={cn(
+                        "w-full px-4 py-2 rounded-2xl bg-white text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange",
+                        { "ring-2 ring-red-400": touched.name && !!nameError }
+                      )}
+                      placeholder="Your name"
+                      required
+                    />
+                    {touched.name && nameError && (
+                      <p id="name-error" className="text-red-200 text-sm">{nameError}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-white font-lufga text-sm">Email</label>
+                    <input
+                      value={contactEmail}
+                      onChange={(e) => {
+                        setContactEmail(e.target.value);
+                        const err = validateEmail(e.target.value);
+                        setEmailError(err);
+                      }}
+                      onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+                      type="email"
+                      name="email"
+                      autoComplete="email"
+                      aria-invalid={touched.email && !!emailError}
+                      aria-describedby={touched.email && emailError ? "email-error" : undefined}
+                      className={cn(
+                        "w-full px-4 py-2 rounded-2xl bg-white text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange",
+                        { "ring-2 ring-red-400": touched.email && !!emailError }
+                      )}
+                      placeholder="you@example.com"
+                      required
+                    />
+                    {touched.email && emailError && (
+                      <p id="email-error" className="text-red-200 text-sm">{emailError}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-white font-lufga text-sm">Subject</label>
                   <input
-                    value={contactName}
-                    onChange={(e) => setContactName(e.target.value)}
+                    value={contactSubject}
+                    onChange={(e) => {
+                      setContactSubject(e.target.value);
+                      const err = validateSubject(e.target.value);
+                      setSubjectError(err);
+                    }}
+                    onBlur={() => setTouched((t) => ({ ...t, subject: true }))}
                     type="text"
-                    name="name"
-                    autoComplete="name"
-                    className="w-full px-4 py-3 rounded-2xl bg-white text-gray-800 placeholder-gray-500 focus:outline-none"
-                    placeholder="Your name"
+                    name="subject"
+                    aria-invalid={touched.subject && !!subjectError}
+                    aria-describedby={touched.subject && subjectError ? "subject-error" : undefined}
+                    className={cn(
+                      "w-full px-4 py-2 rounded-2xl bg-white text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange",
+                      { "ring-2 ring-red-400": touched.subject && !!subjectError }
+                    )}
+                    placeholder="Subject"
                     required
                   />
+                  {touched.subject && subjectError && (
+                    <p id="subject-error" className="text-red-200 text-sm">{subjectError}</p>
+                  )}
                 </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-white font-lufga text-sm">Email</label>
-                  <input
-                    value={contactEmail}
-                    onChange={(e) => setContactEmail(e.target.value)}
-                    type="email"
-                    name="email"
-                    autoComplete="email"
-                    className="w-full px-4 py-3 rounded-2xl bg-white text-gray-800 placeholder-gray-500 focus:outline-none"
-                    placeholder="you@example.com"
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-white font-lufga text-sm">Message</label>
+                  <textarea
+                    value={contactMessage}
+                    onChange={(e) => {
+                      setContactMessage(e.target.value);
+                      const err = validateMessage(e.target.value);
+                      setMessageError(err);
+                    }}
+                    onBlur={() => setTouched((t) => ({ ...t, message: true }))}
+                    name="message"
+                    rows={5}
+                    aria-invalid={touched.message && !!messageError}
+                    aria-describedby={touched.message && messageError ? "message-error" : undefined}
+                    className={cn(
+                      "w-full px-4 py-2 rounded-2xl bg-white text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange",
+                      { "ring-2 ring-red-400": touched.message && !!messageError }
+                    )}
+                    placeholder="Write your message..."
                     required
                   />
+                  {touched.message && messageError && (
+                    <p id="message-error" className="text-red-200 text-sm">{messageError}</p>
+                  )}
                 </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-white font-lufga text-sm">Subject</label>
-                <input
-                  value={contactSubject}
-                  onChange={(e) => setContactSubject(e.target.value)}
-                  type="text"
-                  name="subject"
-                  className="w-full px-4 py-3 rounded-2xl bg-white text-gray-800 placeholder-gray-500 focus:outline-none"
-                  placeholder="Subject"
-                  required
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-white font-lufga text-sm">Message</label>
-                <textarea
-                  value={contactMessage}
-                  onChange={(e) => setContactMessage(e.target.value)}
-                  name="message"
-                  rows={6}
-                  className="w-full px-4 py-3 rounded-2xl bg-white text-gray-800 placeholder-gray-500 focus:outline-none"
-                  placeholder="Write your message..."
-                  required
-                />
-              </div>
 
-              {contactError && (
-                <div className="text-red-200 bg-red-500/20 border border-red-400/50 rounded-xl px-4 py-2">
-                  {contactError}
-                </div>
-              )}
-              {contactSuccess && (
-                <div className="text-green-200 bg-green-500/20 border border-green-400/50 rounded-xl px-4 py-2">
-                  {contactSuccess}
-                </div>
-              )}
+                {contactError && (
+                  <div className="text-red-200 bg-red-500/20 border border-red-400/50 rounded-xl px-4 py-2">
+                    {contactError}
+                  </div>
+                )}
+                {contactSuccess && (
+                  <div className="text-green-200 bg-green-500/20 border border-green-400/50 rounded-xl px-4 py-2">
+                    {contactSuccess}
+                  </div>
+                )}
 
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  disabled={contactLoading}
-                  className="inline-flex items-center px-8 lg:px-10 py-4 lg:py-5 bg-orange rounded-full disabled:opacity-60"
-                >
-                  <span className="text-white font-lufga text-lg lg:text-xl font-bold">
-                    {contactLoading ? "Sending..." : "Send Message"}
-                  </span>
-                </button>
-              </div>
-            </form>
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={contactLoading}
+                    className="inline-flex items-center px-6 lg:px-8 py-3 lg:py-4 bg-orange rounded-full disabled:opacity-60"
+                  >
+                    <span className="text-white font-lufga text-base lg:text-lg font-bold">
+                      {contactLoading ? "Sending..." : "Send Message"}
+                    </span>
+                  </button>
+                </div>
+              </form>
+
+            </div>
           </div>
 
-          <hr className="border-gray-lighter mb-8" />
+          <div className="h-1 w-24 bg-orange rounded-full mx-auto mb-8" />
 
           {/* Footer bottom */}
           <div className="flex flex-col lg:flex-row justify-between items-center space-y-4 lg:space-y-0">

@@ -1,0 +1,429 @@
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { Github, ExternalLink } from "lucide-react";
+
+type ProjectMedia = { id: number; image: string; order: number };
+
+type ProjectSkill = { id: number; name: string; icon?: string | null };
+
+type Project = {
+  id: number;
+  title: string;
+  description: string;
+  media: ProjectMedia[];
+  skills_list?: (string | ProjectSkill)[];
+  links?: { id?: number; url: string; text?: string; order?: number }[];
+};
+
+type Paginated<T> = { count: number; next: string | null; previous: string | null; results: T[] };
+
+const BUILD_ID = typeof window !== "undefined" && (import.meta as any).hot
+  ? String(Date.now())
+  : ((import.meta as any).env?.VITE_BUILD_ID as string) || "1";
+
+const addCacheBuster = (u: string) => {
+  try {
+    const url = new URL(u, typeof window !== "undefined" ? window.location.origin : "");
+    url.searchParams.set("v", BUILD_ID);
+    return url.toString();
+  } catch {
+    const sep = u.includes("?") ? "&" : "?";
+    return `${u}${sep}v=${BUILD_ID}`;
+  }
+};
+
+const excerpt = (s: string | null | undefined, len = 110) => {
+  const t = (s ?? "").replace(/\s+/g, " ").trim();
+  return t.length > len ? t.slice(0, len - 1) + "…" : t;
+};
+
+import { getApiUrl } from "@/lib/config";
+
+export default function ProjectsCarousel() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  // drag state (carousel mode)
+  const [dragX, setDragX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef<{ active: boolean; startX: number; pointerId?: number }>({ active: false, startX: 0 });
+
+  const navigate = useNavigate();
+
+  // Responsive sizing & mode detection
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const [viewportWidth, setViewportWidth] = useState<number>(typeof window !== "undefined" ? window.innerWidth : 1200);
+  const [screenWidth, setScreenWidth] = useState<number>(typeof window !== "undefined" ? window.innerWidth : 1200);
+  const base = { containerH: 620, centerW: 720, centerH: 460, sideW: 460, sideH: 340, baseX: 400, sideY: 48 };
+  const scale = useMemo(() => {
+    const w = viewportWidth || 1200;
+    const sCenter = w / (base.centerW + 16);
+    const sLayout = w / 1200;
+    const s = Math.min(1, Math.max(0.5, Math.min(sCenter, sLayout)));
+    return s;
+  }, [viewportWidth]);
+  const isListMode = screenWidth < 768; // Tailwind md breakpoint
+
+  // List mode state
+  const [visibleCount, setVisibleCount] = useState(3);
+  useEffect(() => {
+    if (isListMode) setVisibleCount(3);
+  }, [isListMode]);
+
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const cw = Math.floor(entry.contentRect.width);
+        setViewportWidth(cw);
+      }
+    });
+    ro.observe(el);
+    const onWin = () => { setViewportWidth(el.clientWidth || window.innerWidth); setScreenWidth(window.innerWidth); };
+    window.addEventListener("resize", onWin);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", onWin);
+    };
+  }, []);
+
+  // Fetch projects
+  useEffect(() => {
+    const url = getApiUrl("/api/projects/");
+    setLoading(true);
+    setError(null);
+    fetch(url, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+      .then((data: Paginated<Project> | Project[]) => {
+        if (Array.isArray(data)) setProjects(data);
+        else if (data && Array.isArray((data as Paginated<Project>).results)) setProjects((data as Paginated<Project>).results);
+        else setProjects([]);
+      })
+      .catch(() => {
+        setProjects([
+          {
+            id: 101,
+            title: "Sample Project A",
+            description: "Fallback project shown when API is unreachable.",
+            media: [{ id: 1001, image: "/project-placeholder.svg", order: 0 }],
+            skills_list: ["React", "TypeScript", "TailwindCSS"],
+            links: [],
+          },
+          {
+            id: 102,
+            title: "Sample Project B",
+            description: "Fallback project B when API is unreachable.",
+            media: [{ id: 1002, image: "/project-placeholder.svg", order: 0 }],
+            skills_list: ["Django", "REST API"],
+            links: [],
+          },
+        ]);
+        setError(null);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const ordered = useMemo(() => {
+    return projects.map((p) => ({
+      ...p,
+      media: Array.isArray(p.media) ? [...p.media].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)) : [],
+    }));
+  }, [projects]);
+
+  const n = ordered.length;
+
+  const prev = useCallback(() => {
+    if (!n) return;
+    setCurrentIndex((i) => (i - 1 + n) % n);
+  }, [n]);
+
+  const next = useCallback(() => {
+    if (!n) return;
+    setCurrentIndex((i) => (i + 1) % n);
+  }, [n]);
+
+  const goto = useCallback((i: number) => setCurrentIndex(i), []);
+
+  // Visible offsets: main + 1 neighbor each side (carousel)
+  const offsets = useMemo(() => {
+    if (n >= 3) return [-1, 0, 1];
+    if (n === 2) return [0, 1];
+    return [0];
+  }, [n]);
+
+  // Pointer/drag handlers (carousel)
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!n || isListMode) return;
+    dragRef.current.active = true;
+    dragRef.current.startX = e.clientX;
+    dragRef.current.pointerId = e.pointerId;
+    setIsDragging(true);
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current.active) return;
+    const delta = e.clientX - dragRef.current.startX;
+    setDragX(delta);
+  };
+
+  const snapAfterDrag = (delta: number) => {
+    const threshold = 80;
+    if (delta <= -threshold) next();
+    else if (delta >= threshold) prev();
+    setDragX(0);
+    setIsDragging(false);
+  };
+
+  const onPointerUp = () => {
+    if (!dragRef.current.active) return;
+    dragRef.current.active = false;
+    snapAfterDrag(dragX);
+    setTimeout(() => setIsDragging(false), 0);
+  };
+
+  // Trackpad horizontal scroll (carousel)
+  const wheelAccum = useRef(0);
+  const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!n || isListMode) return;
+    const main = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    wheelAccum.current += main;
+    const threshold = 100;
+    if (wheelAccum.current <= -threshold) {
+      next();
+      wheelAccum.current = 0;
+    } else if (wheelAccum.current >= threshold) {
+      prev();
+      wheelAccum.current = 0;
+    }
+  };
+
+  if (!loading && (error || n === 0)) return null;
+
+  const centerW = Math.round(base.centerW * scale);
+  const centerH = Math.round(base.centerH * scale);
+  const sideW = Math.round(base.sideW * scale);
+  const sideH = Math.round(base.sideH * scale);
+  const dx = Math.round(base.baseX * scale);
+  const sideY = Math.round(base.sideY * scale);
+  const containerH = Math.max(380, Math.round(base.containerH * scale));
+
+  return (
+    <section id="project" className="py-12 lg:py-16 bg-white">
+      <div className="container mx-auto max-w-7xl px-4">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-12 space-y-6 lg:space-y-0">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-lufga font-bold leading-tight max-w-2xl">
+            <span className="text-gray-text">Let’s have a look at my </span>
+            <span className="text-orange">Projects</span>
+          </h2>
+        </div>
+
+        <div
+          ref={viewportRef}
+          className="relative w-full flex flex-col items-center gap-6 py-8 sm:py-10 px-4 sm:px-10 lg:px-16 select-none touch-pan-y"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onWheel={onWheel}
+        >
+          {isListMode ? (
+            <div className="w-full max-w-3xl mx-auto">
+              {loading ? (
+                <div className="space-y-6">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="w-full h-72 bg-gray-bg border border-gray-border rounded-[40px] animate-pulse" />
+                  ))}
+                </div>
+              ) : (
+                <div className="w-full space-y-6">
+                  {ordered.slice(0, visibleCount).map((project) => {
+                    const primaryImage = project?.media?.[0]?.image || "/project-placeholder.svg";
+                    return (
+                      <div key={project.id} className="w-full">
+                        <button
+                          className="block w-full text-left"
+                          onClick={() => navigate(`/projects/${project.id}`, { state: { project } })}
+                          aria-label={`Open ${project.title}`}
+                        >
+                          <div className="relative w-full h-72 rounded-[40px] overflow-hidden bg-white shadow-[0_4px_55px_0_rgba(0,0,0,0.05)]">
+                            <img
+                              src={addCacheBuster(primaryImage)}
+                              alt={project.title}
+                              className="absolute inset-0 w-full h-full object-cover"
+                              onError={(e) => {
+                                const img = e.currentTarget as HTMLImageElement;
+                                if (img.src.includes("project-placeholder.svg")) return;
+                                img.onerror = null;
+                                img.src = "/project-placeholder.svg";
+                              }}
+                            />
+                          </div>
+                        </button>
+                        <div className="mt-3 flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-lufga font-bold text-gray-text text-base truncate" title={project.title}>
+                              {project.title}
+                            </h3>
+                            <p className="text-gray-lighter font-lufga text-sm truncate">{excerpt(project.description)}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {project.links && project.links.length > 0 ? project.links.slice(0,2).map((l) => {
+                              const isGithub = (l.text || "").toLowerCase().includes("github") || (l.url || "").toLowerCase().includes("github");
+                              return (
+                                <a
+                                  key={l.id || l.url}
+                                  href={l.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className={"p-2 rounded-full " + (isGithub ? "bg_gray_link bg-gray-bg border border-gray-border hover:bg-gray-bg/70" : "bg-orange text-white hover:bg-orange/90")}
+                                  aria-label={isGithub ? "Open GitHub" : "Open link"}
+                                >
+                                  {isGithub ? <Github className="w-4 h-4 text-gray-text" /> : <ExternalLink className="w-4 h-4" />}
+                                </a>
+                              );
+                            }) : null}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {visibleCount < n && (
+                    <div className="pt-4 relative w-full flex items-center justify-center">
+                      <div className="pointer-events-none absolute left-0 right-0 top-1/2 -translate-y-1/2 h-px bg-gradient-to-r from-transparent via-orange-lighter to-transparent" />
+                      <button
+                        onClick={() => setVisibleCount((c) => Math.min(n, c + 3))}
+                        className="relative inline-flex items-center px-8 py-3 sm:px-10 sm:py-4 rounded-full bg-orange text-white font-lufga text-lg sm:text-xl font-semibold shadow-[0_6px_24px_rgba(253,133,58,0.35)] hover:bg-orange/90 transition-colors"
+                        aria-label="Load more projects"
+                      >
+                        Load more
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="relative w-full max-w-6xl" style={{ height: containerH }}>
+                {loading ? (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div
+                      className="bg-gray-bg border border-gray-border rounded-[40px] animate-pulse"
+                      style={{ width: Math.round(900 * scale), height: Math.round(460 * scale) }}
+                    />
+                  </div>
+                ) : (
+                  offsets.map((off) => {
+                    const idx = (currentIndex + off + n) % n;
+                    const project = ordered[idx];
+                    const primaryImage = project?.media?.[0]?.image || "/project-placeholder.svg";
+
+                    const size = off === 0 ? { w: centerW, h: centerH } : { w: sideW, h: sideH };
+                    const baseX = off === 0 ? 0 : off === -1 ? -dx : dx;
+                    const x = baseX + dragX;
+                    const y = off === 0 ? 0 : sideY;
+                    const z = off === 0 ? 30 : 20;
+
+                    return (
+                      <div
+                        key={`${idx}-${off}`}
+                        className="absolute cursor-pointer group"
+                        style={{
+                          width: size.w,
+                          height: size.h,
+                          left: `calc(50% + ${x}px)`,
+                          top: y,
+                          transform: "translateX(-50%)",
+                          zIndex: z,
+                          transition: isDragging
+                            ? "none"
+                            : "left 320ms ease, top 320ms ease, width 320ms ease, height 320ms ease",
+                        }}
+                        onClick={() => {
+                          if (isDragging || Math.abs(dragX) > 6) return;
+                          navigate(`/projects/${project.id}`, { state: { project } });
+                        }}
+                        role="link"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            navigate(`/projects/${project.id}`, { state: { project } });
+                          }
+                        }}
+                      >
+                        <div className="relative w-full h-full rounded-[40px] overflow-hidden bg-white shadow-[0_4px_55px_0_rgba(0,0,0,0.05)] group-hover:shadow-[0_8px_70px_0_rgba(0,0,0,0.15)] transition-shadow duration-300">
+                          <div className="w-full h-full overflow-hidden relative">
+                            <img
+                              src={addCacheBuster(primaryImage)}
+                              alt={project.title}
+                              className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                              onError={(e) => {
+                                const img = e.currentTarget as HTMLImageElement;
+                                if (img.src.includes("project-placeholder.svg")) return;
+                                img.onerror = null;
+                                img.src = "/project-placeholder.svg";
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-3 sm:mt-4 flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-lufga font-bold text-gray-text text-sm sm:text-base md:text-lg truncate" title={project.title}>
+                              {project.title}
+                            </h3>
+                            <p className="text-gray-lighter font-lufga text-xs sm:text-sm truncate">{excerpt(project.description, 90)}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {project.links && project.links.length > 0 ? project.links.slice(0,2).map((l) => {
+                              const isGithub = (l.text || "").toLowerCase().includes("github") || (l.url || "").toLowerCase().includes("github");
+                              return (
+                                <a
+                                  key={l.id || l.url}
+                                  href={l.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className={"p-2 rounded-full " + (isGithub ? "bg_gray_link bg-gray-bg border border-gray-border hover:bg-gray-bg/70" : "bg-orange text-white hover:bg-orange/90")}
+                                  onClick={(e) => e.stopPropagation()}
+                                  aria-label={isGithub ? "Open GitHub" : "Open link"}
+                                >
+                                  {isGithub ? <Github className="w-4 h-4 text-gray-text" /> : <ExternalLink className="w-4 h-4" />}
+                                </a>
+                              );
+                            }) : null}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {!loading && n > 1 && (
+                <div className="flex items-center gap-2">
+                  {ordered.map((_, i) => {
+                    const active = i === currentIndex;
+                    const size = active ? Math.max(6, Math.min(16, Math.round(12 * scale))) : Math.max(5, Math.min(14, Math.round(10 * scale)));
+                    return (
+                      <button key={i} onClick={() => goto(i)} className="transition-all duration-200" aria-label={`Go to project ${i + 1}`}>
+                        <div
+                          className={active ? "rounded-full bg-orange" : "rounded-full bg-gray-400 opacity-50"}
+                          style={{ width: size, height: size }}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {error && <p className="text-center text-gray-light font-lufga mt-6">{error}</p>}
+        </div>
+      </div>
+    </section>
+  );
+}

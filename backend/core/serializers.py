@@ -3,9 +3,14 @@ from .models import HeroSection, About, ContactMessage
 
 
 class HeroSectionSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField() 
     class Meta:
         model = HeroSection
         fields = ['id', 'headline', 'subheadline', 'image', 'instagram', 'linkedin', 'github', 'order', 'is_active']
+    def get_image(self, obj):
+        if obj.image:
+            return obj.image.url   # URL Cloudinary complète
+        return None
 
 
 class AboutSerializer(serializers.ModelSerializer):

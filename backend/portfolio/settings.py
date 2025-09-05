@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from decouple import config
 import dj_database_url
 from datetime import timedelta
+from corsheaders.defaults import default_headers
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -208,10 +209,7 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'http://localhost:8080',
-    'http://localhost:8081',
-    'http://localhost:57931',
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "cache-control",
 ]

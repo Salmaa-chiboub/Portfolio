@@ -1,5 +1,6 @@
 from django.db import models
 from skills.models import SkillReference
+from cloudinary.models import CloudinaryField
 
 class Experience(models.Model):
     EXPERIENCE_TYPE_CHOICES = [
@@ -40,3 +41,16 @@ class ExperienceSkillRef(models.Model):
 
 	def __str__(self):
 		return f"{self.experience} - {self.skill_reference.name}"
+
+
+class ExperienceLink(models.Model):
+    experience = models.ForeignKey(Experience, related_name='links', on_delete=models.CASCADE)
+    url = models.URLField()
+    text = models.CharField(max_length=200)
+    order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"{self.text} - {self.url}"

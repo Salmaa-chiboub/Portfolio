@@ -14,8 +14,6 @@ def project_media_upload_to(instance, filename):
 class Project(models.Model):
 	title = models.CharField(max_length=200)
 	description = models.TextField(blank=True)
-	github_url = models.URLField(blank=True, null=True)
-	live_url = models.URLField(blank=True, null=True)
 	created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="projects")
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)
@@ -50,3 +48,16 @@ class ProjectSkillRef(models.Model):
 
 	def __str__(self):
 		return f"{self.project} - {self.skill_reference.name}"
+
+
+class ProjectLink(models.Model):
+	project = models.ForeignKey(Project, related_name='links', on_delete=models.CASCADE)
+	url = models.URLField()
+	text = models.CharField(max_length=200)
+	order = models.PositiveSmallIntegerField(default=0)
+
+	class Meta:
+		ordering = ['order']
+
+	def __str__(self):
+		return f"Link for {self.project.title}: {self.text}"

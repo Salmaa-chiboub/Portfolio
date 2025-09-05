@@ -22,15 +22,14 @@ class SkillReference(models.Model):
 
 
 class Skill(models.Model):
-	"""Actual skill entries attached to the portfolio/user/etc.
+    reference = models.ForeignKey(SkillReference, on_delete=models.CASCADE, related_name="skills")
 
-	Minimal model: only a foreign key to the canonical SkillReference.
-	"""
-	reference = models.ForeignKey(SkillReference, on_delete=models.CASCADE, related_name="skills")
+    class Meta:
+        verbose_name = "Skill"
+        verbose_name_plural = "Skills"
+        constraints = [
+            models.UniqueConstraint(fields=["reference"], name="unique_reference_in_skill")
+        ]
 
-	class Meta:
-		verbose_name = "Skill"
-		verbose_name_plural = "Skills"
-
-	def __str__(self):
-		return f"{self.reference.name}"
+    def __str__(self):
+        return f"{self.reference.name}"

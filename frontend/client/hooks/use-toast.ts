@@ -1,5 +1,5 @@
-import * as React from "react";
-
+import { useEffect, useState } from "react";
+import type * as React from "react";
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
 
 const TOAST_LIMIT = 1;
@@ -166,9 +166,9 @@ function toast({ ...props }: Toast) {
 }
 
 function useToast() {
-  const [state, setState] = React.useState<State>(memoryState);
+  const [state, setState] = useState<State>(memoryState);
 
-  React.useEffect(() => {
+  useEffect(() => {
     listeners.push(setState);
     return () => {
       const index = listeners.indexOf(setState);
@@ -176,7 +176,9 @@ function useToast() {
         listeners.splice(index, 1);
       }
     };
-  }, [state]);
+    // We intentionally don't include `state` here to avoid re-subscribing on every change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return {
     ...state,

@@ -150,3 +150,18 @@ html {
     text-wrap: balance;
   }
 }
+
+/* Blog image container rounding and overlay */
+@layer components {
+  .blog-image-mask {
+    border-radius: 37px 37px 8px 37px;
+  }
+  .blog-corner-cutout {
+    background: radial-gradient(circle at top left, transparent 60%, rgba(255, 255, 255, 0.1) 70%);
+  }
+  .blog-image-frame {
+    border-radius: 37px 37px 8px 37px;
+    overflow: hidden;
+    isolation: isolate;
+  }
+}

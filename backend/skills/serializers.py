@@ -13,7 +13,9 @@ class SkillReferenceSerializer(serializers.ModelSerializer):
 class SkillSerializer(serializers.ModelSerializer):
     reference = SkillReferenceSerializer(read_only=True)
     reference_id = serializers.PrimaryKeyRelatedField(
-        queryset=SkillReference.objects.all(), source="reference", write_only=True
+        queryset=SkillReference.objects.all(),
+        source="reference",
+        write_only=True
     )
 
     class Meta:
@@ -21,3 +23,13 @@ class SkillSerializer(serializers.ModelSerializer):
         fields = ("id", "reference_id", "reference")
         read_only_fields = ("id",)
 
+    def validate(self, attrs):
+        reference = attrs.get("reference")
+
+        # Vérifier si ce skill existe déjà
+        if Skill.objects.filter(reference=reference).exists():
+            raise serializers.ValidationError(
+                {"reference_id": "Ce skill existe déjà dans le portfolio."}
+            )
+
+        return attrs
